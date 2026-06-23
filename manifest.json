@@ -1,6 +1,6 @@
 {
   "id": "quick-zh",
-  "name": "一键中文翻译 (Quick ZH)",
+  "name": "Quick Chinese Translate",
   "version": "0.4.0",
   "minAppVersion": "0.15.0",
   "description": "一键把当前笔记整篇翻译成中文（标题/文件名也翻），生成中文副本。支持 Google/DeepL/LLM 多引擎，不破坏笔记属性。",

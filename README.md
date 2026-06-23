@@ -1,8 +1,41 @@
-# 一键中文翻译 (Quick ZH) — Obsidian 插件
+# Quick Chinese Translate
+
+One click translates the **whole current note into Simplified Chinese** and saves it as a new copy. No language picker, no copy-paste.
+
+It's built for one job: *"I clipped a foreign-language article and I just want a clean, offline-readable Chinese version."*
+
+## Features
+
+- **Whole-note translation** — click the ribbon icon (译) or run the command `翻译当前笔记 → 中文`.
+- **Title is translated too** — the translated Chinese title becomes the new filename (which is the big title shown at the top of an Obsidian note); `title` / `description` in the frontmatter are translated as well.
+- **Frontmatter is preserved** — only the values of `title`/`description` are translated and safely quoted; all other properties (`source`, `date`, `tags`, `category`, …) are kept verbatim, so the YAML never breaks.
+- **Code blocks are kept untouched** — fenced ``` code / prompts are never sent to the translator.
+- **Original is kept** — a new file is created; the source note is never modified. Machine translation is lossy, so the original stays as the source of truth.
+- **Multiple engines** — Google (free, default, no config), DeepL (API key), or any OpenAI-compatible LLM endpoint (best quality, preserves Markdown).
+
+## Installation
+
+### Manual
+
+Copy `main.js` and `manifest.json` into your vault's `.obsidian/plugins/quick-zh/` folder, then enable the plugin in **Settings → Community plugins**.
+
+### BRAT (beta)
+
+Add the repository `sany2ng0226-boop/quick-zh` in the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
+
+## Usage
+
+1. Open any note.
+2. Click the **译** ribbon icon (or run *Translate current note → Chinese* from the command palette).
+3. A Chinese copy is generated and opened automatically.
+
+Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Google works out of the box.
+
+---
+
+## 中文说明
 
 一键把当前笔记**整篇翻译成简体中文**,生成一个中文副本。无需选语言、无需复制粘贴。
-
-> One click to translate the whole current note into Simplified Chinese as a new copy. No language picker, no copy-paste.
 
 ## 为什么做这个
 

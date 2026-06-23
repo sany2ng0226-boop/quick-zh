@@ -3,8 +3,8 @@
   "name": "Quick Chinese Translate",
   "version": "0.4.0",
   "minAppVersion": "0.15.0",
-  "description": "一键把当前笔记整篇翻译成中文（标题/文件名也翻），生成中文副本。支持 Google/DeepL/LLM 多引擎，不破坏笔记属性。",
+  "description": "One-click translate the whole current note into Simplified Chinese as a new copy. Title and filename are translated too, frontmatter is preserved, and code blocks are kept untouched. Supports Google, DeepL, and OpenAI-compatible LLMs.",
   "author": "jack",
-  "authorUrl": "https://github.com/sany2ng0226-boop/quick-zh",
+  "authorUrl": "https://github.com/sany2ng0226-boop",
   "isDesktopOnly": false
 }

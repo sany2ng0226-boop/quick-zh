@@ -22,7 +22,7 @@ Module._load = function (request, parent, isMain) {
 };
 
 const QuickZh = require('../main.js');
-const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateBody } = QuickZh._test;
+const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody } = QuickZh._test;
 Module._load = originalLoad;
 
 test('splitLongText never leaves a chunk over the provider limit', () => {
@@ -64,6 +64,11 @@ test('translateBody preserves whitespace around fenced code blocks', async () =>
   const body = 'Paragraph before.\n\n```javascript\nconst x = 1;\n```\n\nParagraph after.';
   const output = await translateBody(body, { provider: 'google', targetLang: 'zh-CN' });
   assert.equal(output, body);
+});
+
+test('Markdown translation never sends link destinations or bare URLs to the provider', async () => {
+  const source = 'Read [story](https://example.com/story) at https://x.com/@author.';
+  assert.equal(await translateMarkdownText(source, { provider: 'google', targetLang: 'zh-CN' }), source);
 });
 
 test('loadSecrets migrates plaintext keys out of plugin data', async () => {

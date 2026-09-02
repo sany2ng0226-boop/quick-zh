@@ -106,6 +106,29 @@ async function transFrontmatter(fm, s) {
 function sanitize(name) {
   return name.replace(/[\\/:*?"<>|#^[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
 }
+async function translatePlainSegment(text, s) {
+  if (!text.trim()) return text;
+  const leading = (text.match(/^\s*/) || [''])[0];
+  const trailing = (text.match(/\s*$/) || [''])[0];
+  const core = text.slice(leading.length, text.length - trailing.length);
+  const parts = chunk(core, maxChunk(s));
+  const concurrency = s.provider === 'llm' ? Math.max(1, Math.min(6, Number(s.llmConcurrency) || 1)) : 1;
+  const translated = await mapConcurrent(parts, concurrency, part => translate(part, s));
+  return leading + translated.join('\n\n') + trailing;
+}
+async function translateMarkdownText(text, s) {
+  const pattern = /(!?)\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"')\],;!?]+)/g;
+  const out = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    out.push(await translatePlainSegment(text.slice(cursor, match.index), s));
+    if (match[4]) out.push(match[4]);
+    else out.push(`${match[1]}[${await translate(match[2], s)}](${match[3]})`);
+    cursor = match.index + match[0].length;
+  }
+  out.push(await translatePlainSegment(text.slice(cursor), s));
+  return out.join('');
+}
 // 翻正文：```代码块``` 原样保留不翻（prompt/代码不该被机翻碰），其余分段翻
 async function translateBody(body, s) {
   const segs = body.split(/(```[\s\S]*?```)/g);
@@ -115,10 +138,7 @@ async function translateBody(body, s) {
     const leading = (seg.match(/^\s*/) || [''])[0];
     const trailing = (seg.match(/\s*$/) || [''])[0];
     const core = seg.slice(leading.length, seg.length - trailing.length);
-    const parts = chunk(core, maxChunk(s));
-    const concurrency = s.provider === 'llm' ? Math.max(1, Math.min(6, Number(s.llmConcurrency) || 1)) : 1;
-    const t = await mapConcurrent(parts, concurrency, p => translate(p, s));
-    out.push(leading + t.join('\n\n') + trailing);
+    out.push(leading + await translateMarkdownText(core, s) + trailing);
   }
   return out.join('');
 }
@@ -244,4 +264,4 @@ class QuickZhSettingTab extends PluginSettingTab {
   }
 }
 
-module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateBody };
+module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody };

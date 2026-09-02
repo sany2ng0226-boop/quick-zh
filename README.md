@@ -12,6 +12,8 @@ It's built for one job: *"I clipped a foreign-language article and I just want a
 - **Code blocks are kept untouched** — fenced ``` code / prompts are never sent to the translator.
 - **Original is kept** — a new file is created; the source note is never modified. Machine translation is lossy, so the original stays as the source of truth.
 - **Multiple engines** — Google (free, default, no config), DeepL (API key), or any OpenAI-compatible LLM endpoint (best quality, preserves Markdown).
+- **Safe repeated runs** — existing translated notes are never overwritten; a numbered copy is created instead.
+- **Faster LLM translation** — choose 1–6 concurrent chunks for long notes (default: 2).
 
 ## Installation
 
@@ -58,6 +60,8 @@ Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Goog
   - **Google**(默认,免费,免配置)
   - **DeepL**(填 API Key,支持 Free / Pro)
   - **LLM**(任意 OpenAI 兼容接口,质量最好,且会保留 Markdown 结构)
+- 🛡️ **重复翻译不覆盖**:目标文件已存在时自动生成带序号的新副本，不覆盖已有译文。
+- ⚡ **LLM 长文并发**:可设置 1–6 个分段并发，默认 2。
 
 ## 用法
 
@@ -76,6 +80,7 @@ Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Goog
 ## 隐私
 
 - Google / DeepL / LLM 引擎都是把待翻译文本发到对应服务商。请按需选择,敏感内容建议用自建 LLM 接口。
+- 在支持 SecretStorage 的新版 Obsidian 中，API Key 会存入安全密钥存储；旧版 Obsidian 会继续使用插件本地配置以保持兼容。
 - 插件不收集任何数据,所有请求由 Obsidian 直接发出。
 
 ## License

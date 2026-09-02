@@ -11,6 +11,12 @@ const DEFAULTS = {
   llmEndpoint: 'https://api.openai.com/v1',
   llmKey: '',
   llmModel: 'gpt-4o-mini',
+  llmConcurrency: 2,
+};
+
+const SECRET_IDS = {
+  deeplKey: 'quick-zh-deepl-key',
+  llmKey: 'quick-zh-llm-key',
 };
 
 // ---- 各家接口：输入纯文本 → 返回中文，失败抛错（好让上层 fallback/提示）----
@@ -59,9 +65,22 @@ async function translate(text, s) {
 function maxChunk(s) { return s.provider === 'google' ? 1200 : (s.provider === 'deepl' ? 4000 : 6000); }
 
 function chunk(body, max) {
-  const ps = body.split(/\n\n+/); const cs = []; let c = '';
+  const ps = body.split(/\n\n+/).flatMap(p => splitLongText(p, max)); const cs = []; let c = '';
   for (const p of ps) { if (c && (c + '\n\n' + p).length > max) { cs.push(c); c = p; } else c = c ? c + '\n\n' + p : p; }
   if (c) cs.push(c); return cs;
+}
+function splitLongText(text, max) {
+  if (text.length <= max) return [text];
+  const out = []; let rest = text;
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf('\n', max);
+    if (cut < Math.floor(max / 2)) cut = rest.lastIndexOf(' ', max);
+    if (cut < Math.floor(max / 2)) cut = max;
+    out.push(rest.slice(0, cut));
+    rest = rest.slice(cut).replace(/^\s+/, '');
+  }
+  if (rest) out.push(rest);
+  return out;
 }
 function unquote(v) {
   v = v.trim();
@@ -93,19 +112,75 @@ async function translateBody(body, s) {
   const out = [];
   for (const seg of segs) {
     if (seg.startsWith('```') || !seg.trim()) { out.push(seg); continue; }
-    const parts = chunk(seg, maxChunk(s)); const t = [];
-    for (const p of parts) t.push(await translate(p, s));
-    out.push(t.join('\n\n'));
+    const leading = (seg.match(/^\s*/) || [''])[0];
+    const trailing = (seg.match(/\s*$/) || [''])[0];
+    const core = seg.slice(leading.length, seg.length - trailing.length);
+    const parts = chunk(core, maxChunk(s));
+    const concurrency = s.provider === 'llm' ? Math.max(1, Math.min(6, Number(s.llmConcurrency) || 1)) : 1;
+    const t = await mapConcurrent(parts, concurrency, p => translate(p, s));
+    out.push(leading + t.join('\n\n') + trailing);
   }
   return out.join('');
 }
 
+async function mapConcurrent(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  return results;
+}
+
+function uniquePath(vault, dir, base) {
+  let suffix = 0;
+  let path;
+  do {
+    path = dir + base + (suffix ? ' ' + suffix : '') + '.md';
+    suffix++;
+  } while (vault.getAbstractFileByPath(path));
+  return path;
+}
+
 module.exports = class QuickZh extends Plugin {
   async onload() {
-    this.settings = Object.assign({}, DEFAULTS, await this.loadData());
+    const saved = await this.loadData() || {};
+    this.settings = Object.assign({}, DEFAULTS, saved);
+    await this.loadSecrets(saved);
     this.addRibbonIcon('quick-zh-icon', '翻译当前笔记 → 中文', () => this.run());
     this.addCommand({ id: 'translate-zh', name: '翻译当前笔记 → 中文', callback: () => this.run() });
     this.addSettingTab(new QuickZhSettingTab(this.app, this));
+  }
+  async loadSecrets(saved) {
+    const storage = this.app.secretStorage;
+    if (!storage) return;
+    let migrated = false;
+    for (const key of Object.keys(SECRET_IDS)) {
+      const oldValue = saved[key];
+      if (oldValue) {
+        storage.setSecret(SECRET_IDS[key], oldValue);
+        delete saved[key];
+        migrated = true;
+      }
+      this.settings[key] = storage.getSecret(SECRET_IDS[key]) || '';
+    }
+    if (migrated) await this.saveSettings();
+  }
+  async saveSettings() {
+    const data = Object.assign({}, this.settings);
+    const storage = this.app.secretStorage;
+    if (storage) {
+      for (const key of Object.keys(SECRET_IDS)) {
+        storage.setSecret(SECRET_IDS[key], data[key] || '');
+        delete data[key];
+      }
+    }
+    await this.saveData(data);
   }
   async run() {
     const s = this.settings;
@@ -122,12 +197,12 @@ module.exports = class QuickZh extends Plugin {
       const zh = fmOut + zhBody + '\n';
 
       const dir = file.parent && file.parent.path && file.parent.path !== '/' ? file.parent.path + '/' : '';
-      let base = (s.translateFilename && ztitle) ? sanitize(ztitle) : file.basename + ' (中文)';
-      let newPath = dir + base + '.md';
-      if (newPath === file.path) newPath = dir + base + ' (中文).md'; // 别覆盖原文
+      if (s.translateFilename && !ztitle) ztitle = await translate(file.basename, s);
+      let base = s.translateFilename && sanitize(ztitle) ? sanitize(ztitle) : file.basename + ' (中文)';
+      if (dir + base + '.md' === file.path) base += ' (中文)';
+      const newPath = uniquePath(this.app.vault, dir, base);
 
-      const ex = this.app.vault.getAbstractFileByPath(newPath);
-      if (ex instanceof TFile) await this.app.vault.modify(ex, zh); else await this.app.vault.create(newPath, zh);
+      await this.app.vault.create(newPath, zh);
       n.hide(); new Notice('已生成: ' + newPath.split('/').pop());
       const tf = this.app.vault.getAbstractFileByPath(newPath);
       if (tf instanceof TFile) await this.app.workspace.getLeaf(true).openFile(tf);
@@ -140,7 +215,7 @@ class QuickZhSettingTab extends PluginSettingTab {
   display() {
     const { containerEl: c } = this; c.empty();
     const s = this.plugin.settings;
-    const save = () => this.plugin.saveData(s);
+    const save = () => this.plugin.saveSettings();
 
     new Setting(c).setName('翻译引擎').setDesc('Google 免费免配置；DeepL/LLM 质量更好，需要 Key')
       .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('llm', 'LLM（OpenAI 兼容）')
@@ -154,15 +229,19 @@ class QuickZhSettingTab extends PluginSettingTab {
         .addText(t => t.setValue(s.targetLang).onChange(v => { s.targetLang = v.trim() || 'zh-CN'; save(); }));
     }
     if (s.provider === 'deepl') {
-      new Setting(c).setName('DeepL API Key').addText(t => t.setValue(s.deeplKey).onChange(v => { s.deeplKey = v.trim(); save(); }));
+      new Setting(c).setName('DeepL API Key').addText(t => { t.inputEl.type = 'password'; t.setValue(s.deeplKey).onChange(v => { s.deeplKey = v.trim(); save(); }); });
       new Setting(c).setName('DeepL Pro 账户').setDesc('付费版打开（用 api.deepl.com）')
         .addToggle(t => t.setValue(s.deeplPro).onChange(v => { s.deeplPro = v; save(); }));
     }
     if (s.provider === 'llm') {
       new Setting(c).setName('Endpoint').setDesc('OpenAI 兼容，如 https://api.openai.com/v1')
         .addText(t => t.setValue(s.llmEndpoint).onChange(v => { s.llmEndpoint = v.trim(); save(); }));
-      new Setting(c).setName('API Key').addText(t => t.setValue(s.llmKey).onChange(v => { s.llmKey = v.trim(); save(); }));
+      new Setting(c).setName('API Key').addText(t => { t.inputEl.type = 'password'; t.setValue(s.llmKey).onChange(v => { s.llmKey = v.trim(); save(); }); });
       new Setting(c).setName('模型').addText(t => t.setValue(s.llmModel).onChange(v => { s.llmModel = v.trim(); save(); }));
+      new Setting(c).setName('并发数').setDesc('同时翻译的分段数，默认 2，范围 1–6')
+        .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.llmConcurrency).onChange(v => { s.llmConcurrency = v; save(); }));
     }
   }
 }
+
+module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateBody };

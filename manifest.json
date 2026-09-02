@@ -1,7 +1,7 @@
 {
   "id": "quick-zh",
   "name": "Quick Chinese Translate",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "minAppVersion": "0.15.0",
   "description": "One-click translate the whole current note into Simplified Chinese as a new copy. Title and filename are translated too, frontmatter is preserved, and code blocks are kept untouched. Supports Google, DeepL, and OpenAI-compatible LLMs.",
   "author": "jack",

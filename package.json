@@ -1,0 +1,9 @@
+{
+  "name": "quick-zh",
+  "version": "0.5.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check main.js && node --test"
+  }
+}

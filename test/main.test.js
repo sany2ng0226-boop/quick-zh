@@ -8,7 +8,11 @@ Module._load = function (request, parent, isMain) {
     return {
       Plugin: class {},
       Notice: class {},
-      requestUrl: async ({ url }) => {
+      requestUrl: async ({ url, body }) => {
+        if (url.endsWith('/chat/completions')) {
+          const text = JSON.parse(body).messages[1].content;
+          return { json: { choices: [{ message: { content: text.replace(/\$/g, '').replace(/\\mathbf/g, 'mathbf') } }] } };
+        }
         const text = new URL(url).searchParams.get('q');
         return { json: [[[text]]] };
       },
@@ -69,6 +73,30 @@ test('translateBody preserves whitespace around fenced code blocks', async () =>
 test('Markdown translation never sends link destinations or bare URLs to the provider', async () => {
   const source = 'Read [story](https://example.com/story) at https://x.com/@author.';
   assert.equal(await translateMarkdownText(source, { provider: 'google', targetLang: 'zh-CN' }), source);
+});
+
+test('Markdown translation preserves inline and display math when an LLM would alter it', async () => {
+  const settings = {
+    provider: 'llm',
+    llmEndpoint: 'https://example.com/v1',
+    llmKey: 'test',
+    llmModel: 'test',
+    llmConcurrency: 2,
+  };
+  const source = 'Weight $\\mathbf{W}_b \\in \\mathbb{R}^{d \\times c}$.\n\n$$E = mc^2$$';
+  assert.equal(await translateMarkdownText(source, settings), source);
+});
+
+test('Markdown translation preserves parenthesized LaTeX and math inside link labels', async () => {
+  const settings = {
+    provider: 'llm',
+    llmEndpoint: 'https://example.com/v1',
+    llmKey: 'test',
+    llmModel: 'test',
+    llmConcurrency: 2,
+  };
+  const source = 'See \\(x + y\\), \\[z^2\\], and [$x$ docs](https://example.com/math).';
+  assert.equal(await translateMarkdownText(source, settings), source);
 });
 
 test('loadSecrets migrates plaintext keys out of plugin data', async () => {

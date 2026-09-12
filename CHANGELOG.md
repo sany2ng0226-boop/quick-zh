@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Preserve inline and display LaTeX math during translation, including `$...$`, `$$...$$`, `\\(...\\)`, and `\\[...\\]` forms.
+- Preserve math expressions used inside Markdown link labels.
+- Add regression tests that simulate an LLM altering math delimiters and TeX commands.
+
 ## 0.5.0
 
 - Translate the filename even when a note has no `title` property.

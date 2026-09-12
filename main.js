@@ -117,13 +117,17 @@ async function translatePlainSegment(text, s) {
   return leading + translated.join('\n\n') + trailing;
 }
 async function translateMarkdownText(text, s) {
-  const pattern = /(!?)\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"')\],;!?]+)/g;
+  // Never send math delimiters or their contents to a translation provider.
+  // Prompting an LLM to preserve them is not reliable, and non-LLM providers
+  // may alter TeX commands too.
+  const pattern = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|(?<!\\)\$(?!\$|\s)(?:\\.|[^\\$\n])*(?<![\\\s])\$(?!\$))|(!?)\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"')\],;!?]+)/g;
   const out = [];
   let cursor = 0;
   for (const match of text.matchAll(pattern)) {
     out.push(await translatePlainSegment(text.slice(cursor, match.index), s));
-    if (match[4]) out.push(match[4]);
-    else out.push(`${match[1]}[${await translate(match[2], s)}](${match[3]})`);
+    if (match[1]) out.push(match[1]);
+    else if (match[5]) out.push(match[5]);
+    else out.push(`${match[2]}[${await translateMarkdownText(match[3], s)}](${match[4]})`);
     cursor = match.index + match[0].length;
   }
   out.push(await translatePlainSegment(text.slice(cursor), s));

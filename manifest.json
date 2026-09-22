@@ -1,7 +1,7 @@
 {
   "id": "quick-zh",
   "name": "Quick Chinese Translate",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "minAppVersion": "0.15.0",
   "description": "Translate entire notes into Simplified Chinese copies while preserving frontmatter, Markdown, code, links, and math. Supports Google, DeepL, DeepSeek, OpenAI, and Claude.",
   "author": "jack",

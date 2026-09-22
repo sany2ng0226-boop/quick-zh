@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-09-22
 
 - Add a dedicated DeepSeek provider using the official API endpoint and user-supplied API key.
 - Store the DeepSeek key in Obsidian SecretStorage.

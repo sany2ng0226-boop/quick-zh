@@ -12,9 +12,13 @@ Module._load = function (request, parent, isMain) {
       requestUrl: async request => {
         const { url, body } = request;
         capturedRequests.push(request);
+        if (url.endsWith('/v1/messages')) {
+          const text = JSON.parse(body).messages[0].content;
+          return { status: 200, json: { content: [{ type: 'text', text }] } };
+        }
         if (url.endsWith('/chat/completions')) {
           const text = JSON.parse(body).messages[1].content;
-          return { json: { choices: [{ message: { content: text.replace(/\$/g, '').replace(/\\mathbf/g, 'mathbf') } }] } };
+          return { status: 200, json: { choices: [{ message: { content: text.replace(/\$/g, '').replace(/\\mathbf/g, 'mathbf') } }] } };
         }
         const text = new URL(url).searchParams.get('q');
         return { json: [[[text]]] };
@@ -29,7 +33,7 @@ Module._load = function (request, parent, isMain) {
 };
 
 const QuickZh = require('../main.js');
-const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry } = QuickZh._test;
+const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry, providerConcurrency } = QuickZh._test;
 Module._load = originalLoad;
 
 test('splitLongText never leaves a chunk over the provider limit', () => {
@@ -132,6 +136,49 @@ test('DeepSeek preset uses the official endpoint, selected model, and non-thinki
   assert.deepEqual(payload.thinking, { type: 'disabled' });
 });
 
+test('OpenAI provider uses its official endpoint and separate credentials', async () => {
+  capturedRequests.length = 0;
+  const settings = {
+    provider: 'openai',
+    openaiKey: 'openai-test-key',
+    openaiModel: 'gpt-4.1-mini',
+    openaiConcurrency: 2,
+  };
+  assert.equal(await translateMarkdownText('Translate this paragraph.', settings), 'Translate this paragraph.');
+  const request = capturedRequests.at(-1);
+  const payload = JSON.parse(request.body);
+  assert.equal(request.url, 'https://api.openai.com/v1/chat/completions');
+  assert.equal(request.headers.Authorization, 'Bearer openai-test-key');
+  assert.equal(payload.model, 'gpt-4.1-mini');
+});
+
+test('Claude provider uses the Messages API schema and separate credentials', async () => {
+  capturedRequests.length = 0;
+  const settings = {
+    provider: 'claude',
+    claudeKey: 'claude-test-key',
+    claudeModel: 'claude-sonnet-5',
+    claudeConcurrency: 2,
+  };
+  assert.equal(await translateMarkdownText('Translate this paragraph.', settings), 'Translate this paragraph.');
+  const request = capturedRequests.at(-1);
+  const payload = JSON.parse(request.body);
+  assert.equal(request.url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(request.headers['x-api-key'], 'claude-test-key');
+  assert.equal(request.headers['anthropic-version'], '2023-06-01');
+  assert.equal(payload.model, 'claude-sonnet-5');
+  assert.equal(payload.messages[0].role, 'user');
+  assert.equal(typeof payload.system, 'string');
+});
+
+test('all AI providers use their own bounded concurrency setting', () => {
+  assert.equal(providerConcurrency({ provider: 'deepseek', deepseekConcurrency: 3 }), 3);
+  assert.equal(providerConcurrency({ provider: 'openai', openaiConcurrency: 4 }), 4);
+  assert.equal(providerConcurrency({ provider: 'claude', claudeConcurrency: 5 }), 5);
+  assert.equal(providerConcurrency({ provider: 'llm', llmConcurrency: 6 }), 6);
+  assert.equal(providerConcurrency({ provider: 'google' }), 1);
+});
+
 test('loadSecrets migrates plaintext keys out of plugin data', async () => {
   const secrets = new Map();
   let persisted;
@@ -142,17 +189,27 @@ test('loadSecrets migrates plaintext keys out of plugin data', async () => {
       setSecret: (key, value) => secrets.set(key, value),
     },
   };
-  plugin.settings = { deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret', provider: 'deepseek' };
+  plugin.settings = {
+    deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret',
+    openaiKey: 'openai-secret', claudeKey: 'claude-secret', provider: 'deepseek',
+  };
   plugin.saveData = async data => { persisted = data; };
 
-  await plugin.loadSecrets({ deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret', provider: 'deepseek' });
+  await plugin.loadSecrets({
+    deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret',
+    openaiKey: 'openai-secret', claudeKey: 'claude-secret', provider: 'deepseek',
+  });
 
   assert.equal(secrets.get('quick-zh-deepl-key'), 'deep-secret');
   assert.equal(secrets.get('quick-zh-llm-key'), 'llm-secret');
   assert.equal(secrets.get('quick-zh-deepseek-key'), 'ds-secret');
+  assert.equal(secrets.get('quick-zh-openai-key'), 'openai-secret');
+  assert.equal(secrets.get('quick-zh-claude-key'), 'claude-secret');
   assert.equal('deeplKey' in persisted, false);
   assert.equal('llmKey' in persisted, false);
   assert.equal('deepseekKey' in persisted, false);
+  assert.equal('openaiKey' in persisted, false);
+  assert.equal('claudeKey' in persisted, false);
 });
 
 test('withRetry backs off for retryable DeepSeek failures and then succeeds', async () => {

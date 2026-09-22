@@ -3,7 +3,7 @@ const { Plugin, Notice, requestUrl, addIcon, TFile, PluginSettingTab, Setting } 
 addIcon('quick-zh-icon', '<text x="50" y="74" font-size="78" text-anchor="middle" fill="currentColor" font-family="sans-serif">译</text>');
 
 const DEFAULTS = {
-  provider: 'google',      // google | deepl | deepseek | llm
+  provider: 'google',      // google | deepl | deepseek | openai | claude | llm
   targetLang: 'zh-CN',     // google/llm 用；deepl 固定 ZH
   translateFilename: true, // 把文件名也翻成中文（= Obsidian 大标题）
   deeplKey: '',
@@ -15,15 +15,26 @@ const DEFAULTS = {
   deepseekKey: '',
   deepseekModel: 'deepseek-flash',
   deepseekConcurrency: 2,
+  openaiKey: '',
+  openaiModel: 'gpt-4.1-mini',
+  openaiConcurrency: 2,
+  claudeKey: '',
+  claudeModel: 'claude-sonnet-5',
+  claudeConcurrency: 2,
 };
 
 const SECRET_IDS = {
   deeplKey: 'quick-zh-deepl-key',
   llmKey: 'quick-zh-llm-key',
   deepseekKey: 'quick-zh-deepseek-key',
+  openaiKey: 'quick-zh-openai-key',
+  claudeKey: 'quick-zh-claude-key',
 };
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com';
+const OPENAI_ENDPOINT = 'https://api.openai.com/v1';
+const CLAUDE_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+const TRANSLATION_PROMPT = '你是翻译引擎。把用户内容翻译成简体中文，保留 Markdown 结构，只输出译文，不要解释、不要加引号。';
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 function errorStatus(error) {
@@ -68,41 +79,60 @@ async function viaDeepl(text, s) {
   return t.text;
 }
 async function viaLlm(text, s) {
-  const res = await requestUrl({
-    url: s.llmEndpoint.replace(/\/$/, '') + '/chat/completions', method: 'POST',
-    headers: { Authorization: 'Bearer ' + s.llmKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: s.llmModel, temperature: 0,
-      messages: [
-        { role: 'system', content: '你是翻译引擎。把用户内容翻译成简体中文，保留 Markdown 结构（链接、图片、加粗、列表、代码块原样保留），只输出译文，不要解释、不要加引号。' },
-        { role: 'user', content: text },
-      ],
-    }),
-  });
-  const c = res.json && res.json.choices && res.json.choices[0];
-  const out = c && c.message && c.message.content;
-  if (!out) throw new Error('LLM 返回异常 (' + res.status + ')');
-  return out.trim();
+  return viaOpenAICompatible(text, s.llmEndpoint, s.llmKey, s.llmModel, '自定义接口');
 }
-async function viaDeepseek(text, s) {
+async function viaOpenAICompatible(text, endpoint, key, model, label, extra = {}) {
   return withRetry(async () => {
     const res = await requestUrl({
-      url: DEEPSEEK_ENDPOINT + '/chat/completions', method: 'POST',
-      headers: { Authorization: 'Bearer ' + s.deepseekKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: s.deepseekModel || 'deepseek-flash',
-        temperature: 0,
-        thinking: { type: 'disabled' },
+      url: endpoint.replace(/\/$/, '') + '/chat/completions', method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({
+        model, temperature: 0,
         messages: [
-          { role: 'system', content: '你是翻译引擎。把用户内容翻译成简体中文，保留 Markdown 结构，只输出译文，不要解释、不要加引号。' },
+          { role: 'system', content: TRANSLATION_PROMPT },
           { role: 'user', content: text },
         ],
-      }),
+      }, extra)),
     });
     const choice = res.json && res.json.choices && res.json.choices[0];
     const out = choice && choice.message && choice.message.content;
     if (!out) {
-      const error = new Error('DeepSeek 返回异常 (' + res.status + ')');
+      const error = new Error(label + ' 返回异常 (' + res.status + ')');
+      error.status = res.status;
+      throw error;
+    }
+    return out.trim();
+  });
+}
+async function viaOpenAI(text, s) {
+  return viaOpenAICompatible(text, OPENAI_ENDPOINT, s.openaiKey, s.openaiModel || 'gpt-4.1-mini', 'OpenAI');
+}
+async function viaDeepseek(text, s) {
+  return viaOpenAICompatible(text, DEEPSEEK_ENDPOINT, s.deepseekKey, s.deepseekModel || 'deepseek-flash', 'DeepSeek', {
+    thinking: { type: 'disabled' },
+  });
+}
+async function viaClaude(text, s) {
+  return withRetry(async () => {
+    const res = await requestUrl({
+      url: CLAUDE_ENDPOINT, method: 'POST',
+      headers: {
+        'x-api-key': s.claudeKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: s.claudeModel || 'claude-sonnet-5',
+        max_tokens: 8192,
+        temperature: 0,
+        system: TRANSLATION_PROMPT,
+        messages: [{ role: 'user', content: text }],
+      }),
+    });
+    const content = res.json && res.json.content;
+    const out = Array.isArray(content) ? content.filter(block => block && block.type === 'text').map(block => block.text).join('') : '';
+    if (!out) {
+      const error = new Error('Claude 返回异常 (' + res.status + ')');
       error.status = res.status;
       throw error;
     }
@@ -113,10 +143,18 @@ async function translate(text, s) {
   if (!text || !text.trim()) return text;
   if (s.provider === 'deepl') return viaDeepl(text, s);
   if (s.provider === 'deepseek') return viaDeepseek(text, s);
+  if (s.provider === 'openai') return viaOpenAI(text, s);
+  if (s.provider === 'claude') return viaClaude(text, s);
   if (s.provider === 'llm') return viaLlm(text, s);
   return viaGoogle(text, s.targetLang);
 }
 function maxChunk(s) { return s.provider === 'google' ? 1200 : (s.provider === 'deepl' ? 4000 : 6000); }
+
+function providerConcurrency(s) {
+  const key = s.provider + 'Concurrency';
+  return ['deepseek', 'openai', 'claude', 'llm'].includes(s.provider)
+    ? Math.max(1, Math.min(6, Number(s[key]) || 1)) : 1;
+}
 
 function chunk(body, max) {
   const ps = body.split(/\n\n+/).flatMap(p => splitLongText(p, max)); const cs = []; let c = '';
@@ -162,9 +200,7 @@ function sanitize(name) {
 }
 async function translatePlainSegment(text, s) {
   if (!text.trim()) return text;
-  const configuredConcurrency = s.provider === 'deepseek' ? s.deepseekConcurrency : s.llmConcurrency;
-  const concurrency = (s.provider === 'llm' || s.provider === 'deepseek')
-    ? Math.max(1, Math.min(6, Number(configuredConcurrency) || 1)) : 1;
+  const concurrency = providerConcurrency(s);
   const blocks = text.split(/(\n[ \t]*\n+)/);
   const translated = await mapConcurrent(blocks, concurrency, async block => {
     if (!block.trim() || !/[\p{L}\p{N}]/u.test(block)) return block;
@@ -181,9 +217,7 @@ async function translatePlainSegment(text, s) {
 async function translateMarkdownText(text, s) {
   const paragraphs = text.split(/(\n[ \t]*\n+)/);
   if (paragraphs.length > 1) {
-    const configuredConcurrency = s.provider === 'deepseek' ? s.deepseekConcurrency : s.llmConcurrency;
-    const concurrency = (s.provider === 'llm' || s.provider === 'deepseek')
-      ? Math.max(1, Math.min(6, Number(configuredConcurrency) || 1)) : 1;
+    const concurrency = providerConcurrency(s);
     const translated = await mapConcurrent(paragraphs, concurrency, paragraph =>
       paragraph.trim() ? translateMarkdownText(paragraph, s) : paragraph);
     return translated.join('');
@@ -312,8 +346,9 @@ class QuickZhSettingTab extends PluginSettingTab {
     const s = this.plugin.settings;
     const save = () => this.plugin.saveSettings();
 
-    new Setting(c).setName('翻译引擎').setDesc('Google 免费免配置；DeepL/LLM 质量更好，需要 Key')
-      .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('deepseek', 'DeepSeek').addOption('llm', 'LLM（OpenAI 兼容）')
+    new Setting(c).setName('翻译引擎').setDesc('各 AI 服务商使用用户自己的 API Key')
+      .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('deepseek', 'DeepSeek')
+        .addOption('openai', 'OpenAI').addOption('claude', 'Claude').addOption('llm', '自定义 OpenAI 兼容接口')
         .setValue(s.provider).onChange(v => { s.provider = v; save(); this.display(); }));
 
     new Setting(c).setName('翻译文件名（= 笔记大标题）').setDesc('开启后生成的中文笔记文件名也用中文标题')
@@ -345,7 +380,25 @@ class QuickZhSettingTab extends PluginSettingTab {
       new Setting(c).setName('DeepSeek 并发数').setDesc('同时翻译的分段数，默认 2；遇到限流会自动退避重试')
         .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.deepseekConcurrency).onChange(v => { s.deepseekConcurrency = v; save(); }));
     }
+    if (s.provider === 'openai') {
+      new Setting(c).setName('OpenAI API Key').setDesc('使用你自己的 Key，仅保存在 Obsidian 本机 SecretStorage')
+        .addText(t => { t.inputEl.type = 'password'; t.setValue(s.openaiKey).onChange(v => { s.openaiKey = v.trim(); save(); }); });
+      new Setting(c).setName('OpenAI 模型')
+        .addDropdown(d => d.addOption('gpt-4.1-mini', 'GPT-4.1 Mini').addOption('gpt-5-mini', 'GPT-5 Mini').addOption('gpt-4o-mini', 'GPT-4o Mini')
+          .setValue(s.openaiModel).onChange(v => { s.openaiModel = v; save(); }));
+      new Setting(c).setName('OpenAI 并发数').setDesc('同时翻译的分段数，默认 2；遇到限流会自动退避重试')
+        .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.openaiConcurrency).onChange(v => { s.openaiConcurrency = v; save(); }));
+    }
+    if (s.provider === 'claude') {
+      new Setting(c).setName('Claude API Key').setDesc('使用你自己的 Key，仅保存在 Obsidian 本机 SecretStorage')
+        .addText(t => { t.inputEl.type = 'password'; t.setValue(s.claudeKey).onChange(v => { s.claudeKey = v.trim(); save(); }); });
+      new Setting(c).setName('Claude 模型')
+        .addDropdown(d => d.addOption('claude-sonnet-5', 'Claude Sonnet 5').addOption('claude-opus-5', 'Claude Opus 5')
+          .setValue(s.claudeModel).onChange(v => { s.claudeModel = v; save(); }));
+      new Setting(c).setName('Claude 并发数').setDesc('同时翻译的分段数，默认 2；遇到限流会自动退避重试')
+        .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.claudeConcurrency).onChange(v => { s.claudeConcurrency = v; save(); }));
+    }
   }
 }
 
-module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry, errorStatus };
+module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry, errorStatus, providerConcurrency };

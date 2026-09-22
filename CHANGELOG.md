@@ -9,6 +9,7 @@
 - Add regression tests for retry behavior and DeepSeek secret migration.
 - Add dedicated OpenAI and Claude providers with separate API keys, model presets, concurrency controls, and retry handling.
 - Remove the unverified custom-compatible option from the settings menu while retaining legacy configuration compatibility.
+- Rewrite the product description, provider guide, and privacy documentation to match the supported feature set.
 
 ## 0.5.1
 

@@ -3,7 +3,7 @@
   "name": "Quick Chinese Translate",
   "version": "0.5.1",
   "minAppVersion": "0.15.0",
-  "description": "One-click translate the whole current note into Simplified Chinese as a new copy. Title and filename are translated too, frontmatter is preserved, and code blocks are kept untouched. Supports Google, DeepL, and OpenAI-compatible LLMs.",
+  "description": "Translate entire notes into Simplified Chinese copies while preserving frontmatter, Markdown, code, links, and math. Supports Google, DeepL, DeepSeek, OpenAI, and Claude.",
   "author": "jack",
   "authorUrl": "https://github.com/sany2ng0226-boop",
   "isDesktopOnly": false

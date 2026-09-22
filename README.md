@@ -1,91 +1,118 @@
 # Quick Chinese Translate
 
-One click translates the **whole current note into Simplified Chinese** and saves it as a new copy. No language picker, no copy-paste.
+Translate an entire Obsidian note into Simplified Chinese with one click. Quick Chinese Translate creates a new Chinese copy while keeping the original note untouched and protecting the Markdown structures that should not be translated.
 
-It's built for one job: *"I clipped a foreign-language article and I just want a clean, offline-readable Chinese version."*
+Built for clipped articles, research notes, technical writing, and any other foreign-language note you want to keep as a clean, offline-readable Chinese copy.
 
-## Features
+## What it does
 
-- **Whole-note translation** — click the ribbon icon (译) or run the command `翻译当前笔记 → 中文`.
-- **Title is translated too** — the translated Chinese title becomes the new filename (which is the big title shown at the top of an Obsidian note); `title` / `description` in the frontmatter are translated as well.
-- **Frontmatter is preserved** — only the values of `title`/`description` are translated and safely quoted; all other properties (`source`, `date`, `tags`, `category`, …) are kept verbatim, so the YAML never breaks.
-- **Code blocks are kept untouched** — fenced ``` code / prompts are never sent to the translator.
-- **Original is kept** — a new file is created; the source note is never modified. Machine translation is lossy, so the original stays as the source of truth.
-- **Multiple engines** — Google, DeepL, DeepSeek, OpenAI, and Claude.
-- **Safe repeated runs** — existing translated notes are never overwritten; a numbered copy is created instead.
-- **Faster LLM translation** — choose 1–6 concurrent chunks for long notes (default: 2).
-- **First-class AI providers** — DeepSeek, OpenAI, and Claude each have their own key, model, and concurrency controls; all use automatic backoff for temporary failures.
+- Translates the complete note instead of only selected text.
+- Translates the note title and uses it as the new filename.
+- Translates `title` and `description` in frontmatter while preserving all other properties.
+- Keeps fenced code blocks unchanged and never sends them to the translation provider.
+- Preserves Markdown link destinations, bare URLs, and LaTeX math.
+- Keeps paragraph order stable when long notes are translated concurrently.
+- Creates a numbered copy when the translated filename already exists—nothing is overwritten.
+- Leaves the source note untouched as the original reference.
 
-## Installation
+## Translation providers
 
-### Manual
+| Provider | Setup | Notes |
+| --- | --- | --- |
+| Google | None | Free default for quick, convenient translation |
+| DeepL | Your DeepL API key | Supports DeepL Free and Pro endpoints |
+| DeepSeek | Your DeepSeek API key | Official endpoint, model presets, non-thinking translation, and retry handling |
+| OpenAI | Your OpenAI API key | Official endpoint and model presets |
+| Claude | Your Anthropic API key | Official Claude Messages API and model presets |
 
-Copy `main.js` and `manifest.json` into your vault's `.obsidian/plugins/quick-zh/` folder, then enable the plugin in **Settings → Community plugins**.
+DeepSeek, OpenAI, and Claude support 1–6 concurrent translation chunks for long notes. The default is 2. Temporary rate-limit and server failures use bounded exponential backoff, while authentication errors fail immediately.
 
-### BRAT (beta)
-
-Add the repository `sany2ng0226-boop/quick-zh` in the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
+Every API-based provider uses the current user's own key. The plugin does not include a shared key, proxy requests through the plugin author, or pay provider charges on the user's behalf.
 
 ## Usage
 
-1. Open any note.
-2. Click the **译** ribbon icon (or run *Translate current note → Chinese* from the command palette).
-3. A Chinese copy is generated and opened automatically.
+1. Open the note you want to translate.
+2. Click the **译** ribbon icon, or run **翻译当前笔记 → 中文** from the command palette.
+3. The translated copy is created and opened automatically.
 
-Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Google works out of the box.
+Choose a provider and enter its key under **Settings → Quick Chinese Translate**. Google is selected by default and requires no configuration.
+
+## Installation
+
+### Manual installation
+
+Copy `main.js` and `manifest.json` into your vault's `.obsidian/plugins/quick-zh/` directory, then enable **Quick Chinese Translate** under **Settings → Community plugins**.
+
+### BRAT
+
+Add `sany2ng0226-boop/quick-zh` to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+
+## Privacy and API keys
+
+- Translation text is sent directly from Obsidian to the provider selected by the user.
+- API keys belong to each user and are never bundled with the plugin or published in the repository.
+- On supported Obsidian versions, keys are stored in local SecretStorage and shown as masked fields in settings.
+- The plugin does not collect analytics or relay translation content through its own server.
+- Avoid sending sensitive notes to third-party translation services unless their privacy terms meet your needs.
 
 ---
 
 ## 中文说明
 
-一键把当前笔记**整篇翻译成简体中文**,生成一个中文副本。无需选语言、无需复制粘贴。
+Quick Chinese Translate 是一个面向 Obsidian 的整篇笔记中文翻译插件。点击一次，即可生成一份简体中文副本；原文保持不动，Markdown、笔记属性和技术内容得到针对性保护。
 
-## 为什么做这个
+它适合剪藏文章、研究资料、技术文档，以及任何希望保存为干净、可离线阅读中文版的外文笔记。
 
-市面上的翻译插件大多是**选中文字翻译**或**双语对照**,而且经常会:
+## 它能做什么
 
-- 不翻笔记标题(Obsidian 里标题 = 文件名);
-- 把 YAML 笔记属性(frontmatter)搞坏;
-- 把代码块、Prompt 也一起翻坏。
+- 翻译整篇笔记，不需要手动选择文字或复制粘贴。
+- 翻译笔记标题，并将中文标题作为新文件名。
+- 翻译 frontmatter 中的 `title` 和 `description`，其余属性保持原样。
+- 围栏代码块保持不变，并且不会发送给翻译服务商。
+- 保护 Markdown 链接地址、裸 URL 和 LaTeX 公式。
+- 长文并发翻译后仍按原文顺序组装，不打乱段落。
+- 目标文件已存在时自动创建带序号的新副本，不覆盖已有笔记。
+- 原始笔记始终保留，作为可靠的原文依据。
 
-这个插件专门解决"**剪藏的外文文章,我想要一份干净的、能离线读的中文版**"这个场景。
+## 翻译服务商
 
-## 功能
+| 服务商 | 配置 | 说明 |
+| --- | --- | --- |
+| Google | 无需配置 | 默认免费模式，开箱即用 |
+| DeepL | 用户自己的 DeepL API Key | 支持 Free 和 Pro 接口 |
+| DeepSeek | 用户自己的 DeepSeek API Key | 官方接口、模型预设、非思考翻译和自动重试 |
+| OpenAI | 用户自己的 OpenAI API Key | 官方接口和模型预设 |
+| Claude | 用户自己的 Anthropic API Key | 官方 Messages API 和模型预设 |
 
-- 📄 **整篇翻译**:点左侧栏「译」图标,或运行命令 `翻译当前笔记 → 中文`。
-- 🏷️ **标题也翻**:翻译后的中文标题直接作为新文件名(= Obsidian 顶部大标题);frontmatter 里的 `title` / `description` 也翻。
-- 🔒 **不破坏笔记属性**:只翻 `title`/`description` 的值并用合法引号包裹,`source`/`date`/`tags`/`category` 等其它属性原样保留,YAML 结构不破。
-- 🧩 **代码块原样保留**:` ``` ` 围起来的代码 / Prompt 不翻,保证技术内容不被机翻弄乱。
-- 🔁 **保留原件**:生成的是新文件,原文不动(翻译有损,原文是 ground truth)。标题本就是中文的笔记会自动加 ` (中文)` 后缀,不覆盖原文。
-- 🌐 **多引擎可选**:
-  - **Google**(默认,免费,免配置)
-  - **DeepL**(填 API Key,支持 Free / Pro)
-  - **DeepSeek**(使用自己的 API Key，内置官方接口与模型预设，限流时自动退避重试)
-  - **OpenAI**(使用自己的 API Key，内置官方接口与模型预设)
-  - **Claude**(使用自己的 API Key，适配官方 Messages API)
-- 🛡️ **重复翻译不覆盖**:目标文件已存在时自动生成带序号的新副本，不覆盖已有译文。
-- ⚡ **AI 长文并发**:DeepSeek / OpenAI / Claude 均可设置 1–6 个分段并发，默认 2。
-- 🚀 **DeepSeek 专项适配**:可选 Flash / V4 Pro，默认关闭思考以提高翻译速度；429 或临时服务错误会自动退避重试。
+DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发数为 2。遇到限流或临时服务器错误时会进行有限次数的指数退避重试；Key 错误等认证问题不会反复请求。
 
-## 用法
+所有需要 API 的服务商都使用当前用户自己的 Key。插件不提供共享 Key，不通过作者的服务器转发请求，也不承担用户的 API 费用。
 
-1. 打开任意笔记。
-2. 点左侧栏的「译」图标(或命令面板搜「翻译当前笔记」)。
-3. 自动生成中文副本并打开。
+## 使用方法
 
-切换引擎 / 填 Key:**设置 → 一键中文翻译**。默认 Google,开箱即用。
+1. 打开需要翻译的笔记。
+2. 点击左侧栏的 **译** 图标，或在命令面板运行 **翻译当前笔记 → 中文**。
+3. 插件会自动生成并打开中文副本。
+
+在 **设置 → Quick Chinese Translate** 中选择服务商并填写对应 Key。默认使用 Google，无需配置。
 
 ## 安装
 
 ### 手动安装
 
-把 `main.js`、`manifest.json` 放到你的库的 `.obsidian/plugins/quick-zh/` 目录下,然后在 设置 → 第三方插件 里启用。
+将 `main.js` 和 `manifest.json` 放入库目录下的 `.obsidian/plugins/quick-zh/`，然后前往 **设置 → 第三方插件** 启用 **Quick Chinese Translate**。
 
-## 隐私
+### BRAT
 
-- Google / DeepL / DeepSeek / OpenAI / Claude 都会把待翻译文本发到所选服务商。请按需选择，避免翻译敏感内容。
-- 在支持 SecretStorage 的新版 Obsidian 中，API Key 会存入安全密钥存储；旧版 Obsidian 会继续使用插件本地配置以保持兼容。
-- 插件不收集任何数据,所有请求由 Obsidian 直接发出。
+在 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 中添加仓库 `sany2ng0226-boop/quick-zh`。
+
+## 隐私与 API Key
+
+- 待翻译文本由 Obsidian 直接发送给用户选择的服务商。
+- API Key 属于各个用户，不会内置在插件中，也不会上传到公开仓库。
+- 在支持的 Obsidian 版本中，Key 保存在本机 SecretStorage，并在设置页中以密码形式遮挡。
+- 插件不收集分析数据，也不会通过自己的服务器中转翻译内容。
+- 如果笔记包含敏感信息，请先确认所选服务商的隐私条款符合你的需求。
 
 ## License
 

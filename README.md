@@ -11,9 +11,10 @@ It's built for one job: *"I clipped a foreign-language article and I just want a
 - **Frontmatter is preserved** — only the values of `title`/`description` are translated and safely quoted; all other properties (`source`, `date`, `tags`, `category`, …) are kept verbatim, so the YAML never breaks.
 - **Code blocks are kept untouched** — fenced ``` code / prompts are never sent to the translator.
 - **Original is kept** — a new file is created; the source note is never modified. Machine translation is lossy, so the original stays as the source of truth.
-- **Multiple engines** — Google (free, default, no config), DeepL (API key), or any OpenAI-compatible LLM endpoint (best quality, preserves Markdown).
+- **Multiple engines** — Google (free, default, no config), DeepL, DeepSeek, or any OpenAI-compatible LLM endpoint.
 - **Safe repeated runs** — existing translated notes are never overwritten; a numbered copy is created instead.
 - **Faster LLM translation** — choose 1–6 concurrent chunks for long notes (default: 2).
+- **DeepSeek preset** — uses your own API key, fast non-thinking translation, and automatic backoff for rate limits or temporary server errors.
 
 ## Installation
 
@@ -59,9 +60,11 @@ Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Goog
 - 🌐 **多引擎可选**:
   - **Google**(默认,免费,免配置)
   - **DeepL**(填 API Key,支持 Free / Pro)
+  - **DeepSeek**(使用自己的 API Key，内置官方接口与模型预设，限流时自动退避重试)
   - **LLM**(任意 OpenAI 兼容接口,质量最好,且会保留 Markdown 结构)
 - 🛡️ **重复翻译不覆盖**:目标文件已存在时自动生成带序号的新副本，不覆盖已有译文。
 - ⚡ **LLM 长文并发**:可设置 1–6 个分段并发，默认 2。
+- 🚀 **DeepSeek 专项适配**:可选 Flash / V4 Pro，默认关闭思考以提高翻译速度；429 或临时服务错误会自动退避重试。
 
 ## 用法
 

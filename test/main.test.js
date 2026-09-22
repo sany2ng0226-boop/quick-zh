@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
+const capturedRequests = [];
 
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -8,7 +9,9 @@ Module._load = function (request, parent, isMain) {
     return {
       Plugin: class {},
       Notice: class {},
-      requestUrl: async ({ url, body }) => {
+      requestUrl: async request => {
+        const { url, body } = request;
+        capturedRequests.push(request);
         if (url.endsWith('/chat/completions')) {
           const text = JSON.parse(body).messages[1].content;
           return { json: { choices: [{ message: { content: text.replace(/\$/g, '').replace(/\\mathbf/g, 'mathbf') } }] } };
@@ -26,7 +29,7 @@ Module._load = function (request, parent, isMain) {
 };
 
 const QuickZh = require('../main.js');
-const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody } = QuickZh._test;
+const { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry } = QuickZh._test;
 Module._load = originalLoad;
 
 test('splitLongText never leaves a chunk over the provider limit', () => {
@@ -87,6 +90,18 @@ test('Markdown translation preserves inline and display math when an LLM would a
   assert.equal(await translateMarkdownText(source, settings), source);
 });
 
+test('Markdown translation preserves blank lines around protected elements', async () => {
+  const settings = {
+    provider: 'llm',
+    llmEndpoint: 'https://example.com/v1',
+    llmKey: 'test',
+    llmModel: 'test',
+    llmConcurrency: 2,
+  };
+  const source = 'First paragraph.\n\n[Docs](https://example.com/docs).\n\nInline $E = mc^2$.\n\nLast paragraph.';
+  assert.equal(await translateMarkdownText(source, settings), source);
+});
+
 test('Markdown translation preserves parenthesized LaTeX and math inside link labels', async () => {
   const settings = {
     provider: 'llm',
@@ -99,6 +114,24 @@ test('Markdown translation preserves parenthesized LaTeX and math inside link la
   assert.equal(await translateMarkdownText(source, settings), source);
 });
 
+test('DeepSeek preset uses the official endpoint, selected model, and non-thinking mode', async () => {
+  capturedRequests.length = 0;
+  const source = 'Translate this paragraph.';
+  const settings = {
+    provider: 'deepseek',
+    deepseekKey: 'ds-test-key',
+    deepseekModel: 'deepseek-flash',
+    deepseekConcurrency: 2,
+  };
+  assert.equal(await translateMarkdownText(source, settings), source);
+  const request = capturedRequests.at(-1);
+  const payload = JSON.parse(request.body);
+  assert.equal(request.url, 'https://api.deepseek.com/chat/completions');
+  assert.equal(request.headers.Authorization, 'Bearer ds-test-key');
+  assert.equal(payload.model, 'deepseek-flash');
+  assert.deepEqual(payload.thinking, { type: 'disabled' });
+});
+
 test('loadSecrets migrates plaintext keys out of plugin data', async () => {
   const secrets = new Map();
   let persisted;
@@ -109,13 +142,37 @@ test('loadSecrets migrates plaintext keys out of plugin data', async () => {
       setSecret: (key, value) => secrets.set(key, value),
     },
   };
-  plugin.settings = { deeplKey: 'deep-secret', llmKey: 'llm-secret', provider: 'llm' };
+  plugin.settings = { deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret', provider: 'deepseek' };
   plugin.saveData = async data => { persisted = data; };
 
-  await plugin.loadSecrets({ deeplKey: 'deep-secret', llmKey: 'llm-secret', provider: 'llm' });
+  await plugin.loadSecrets({ deeplKey: 'deep-secret', llmKey: 'llm-secret', deepseekKey: 'ds-secret', provider: 'deepseek' });
 
   assert.equal(secrets.get('quick-zh-deepl-key'), 'deep-secret');
   assert.equal(secrets.get('quick-zh-llm-key'), 'llm-secret');
+  assert.equal(secrets.get('quick-zh-deepseek-key'), 'ds-secret');
   assert.equal('deeplKey' in persisted, false);
   assert.equal('llmKey' in persisted, false);
+  assert.equal('deepseekKey' in persisted, false);
+});
+
+test('withRetry backs off for retryable DeepSeek failures and then succeeds', async () => {
+  const delays = [];
+  let calls = 0;
+  const result = await withRetry(async () => {
+    calls++;
+    if (calls < 3) throw Object.assign(new Error('busy'), { status: calls === 1 ? 429 : 503 });
+    return 'ok';
+  }, { retries: 3, baseDelay: 10, sleep: async ms => delays.push(ms) });
+  assert.equal(result, 'ok');
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [10, 20]);
+});
+
+test('withRetry does not retry authentication or balance failures', async () => {
+  let calls = 0;
+  await assert.rejects(() => withRetry(async () => {
+    calls++;
+    throw Object.assign(new Error('bad key'), { status: 401 });
+  }, { sleep: async () => {} }), /bad key/);
+  assert.equal(calls, 1);
 });

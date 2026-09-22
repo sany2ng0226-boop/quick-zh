@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add a dedicated DeepSeek provider using the official API endpoint and user-supplied API key.
+- Store the DeepSeek key in Obsidian SecretStorage.
+- Add DeepSeek model and concurrency controls with a safe default of two concurrent chunks.
+- Retry rate-limit and temporary server failures with bounded exponential backoff.
+- Add regression tests for retry behavior and DeepSeek secret migration.
+
 ## 0.5.1
 
 - Preserve inline and display LaTeX math during translation, including `$...$`, `$$...$$`, `\\(...\\)`, and `\\[...\\]` forms.

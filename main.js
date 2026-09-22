@@ -3,7 +3,7 @@ const { Plugin, Notice, requestUrl, addIcon, TFile, PluginSettingTab, Setting } 
 addIcon('quick-zh-icon', '<text x="50" y="74" font-size="78" text-anchor="middle" fill="currentColor" font-family="sans-serif">译</text>');
 
 const DEFAULTS = {
-  provider: 'google',      // google | deepl | llm
+  provider: 'google',      // google | deepl | deepseek | llm
   targetLang: 'zh-CN',     // google/llm 用；deepl 固定 ZH
   translateFilename: true, // 把文件名也翻成中文（= Obsidian 大标题）
   deeplKey: '',
@@ -12,12 +12,40 @@ const DEFAULTS = {
   llmKey: '',
   llmModel: 'gpt-4o-mini',
   llmConcurrency: 2,
+  deepseekKey: '',
+  deepseekModel: 'deepseek-flash',
+  deepseekConcurrency: 2,
 };
 
 const SECRET_IDS = {
   deeplKey: 'quick-zh-deepl-key',
   llmKey: 'quick-zh-llm-key',
+  deepseekKey: 'quick-zh-deepseek-key',
 };
+
+const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com';
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function errorStatus(error) {
+  return Number(error && (error.status || error.statusCode || (error.response && error.response.status))) || 0;
+}
+
+async function withRetry(operation, options = {}) {
+  const retries = Number.isInteger(options.retries) ? options.retries : 3;
+  const baseDelay = Number.isFinite(options.baseDelay) ? options.baseDelay : 500;
+  const sleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation(attempt);
+    } catch (error) {
+      const status = errorStatus(error);
+      if (attempt >= retries || !RETRYABLE_STATUS.has(status)) throw error;
+      await sleep(baseDelay * (2 ** attempt));
+      attempt++;
+    }
+  }
+}
 
 // ---- 各家接口：输入纯文本 → 返回中文，失败抛错（好让上层 fallback/提示）----
 async function viaGoogle(text, tl) {
@@ -56,9 +84,35 @@ async function viaLlm(text, s) {
   if (!out) throw new Error('LLM 返回异常 (' + res.status + ')');
   return out.trim();
 }
+async function viaDeepseek(text, s) {
+  return withRetry(async () => {
+    const res = await requestUrl({
+      url: DEEPSEEK_ENDPOINT + '/chat/completions', method: 'POST',
+      headers: { Authorization: 'Bearer ' + s.deepseekKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: s.deepseekModel || 'deepseek-flash',
+        temperature: 0,
+        thinking: { type: 'disabled' },
+        messages: [
+          { role: 'system', content: '你是翻译引擎。把用户内容翻译成简体中文，保留 Markdown 结构，只输出译文，不要解释、不要加引号。' },
+          { role: 'user', content: text },
+        ],
+      }),
+    });
+    const choice = res.json && res.json.choices && res.json.choices[0];
+    const out = choice && choice.message && choice.message.content;
+    if (!out) {
+      const error = new Error('DeepSeek 返回异常 (' + res.status + ')');
+      error.status = res.status;
+      throw error;
+    }
+    return out.trim();
+  });
+}
 async function translate(text, s) {
   if (!text || !text.trim()) return text;
   if (s.provider === 'deepl') return viaDeepl(text, s);
+  if (s.provider === 'deepseek') return viaDeepseek(text, s);
   if (s.provider === 'llm') return viaLlm(text, s);
   return viaGoogle(text, s.targetLang);
 }
@@ -108,15 +162,32 @@ function sanitize(name) {
 }
 async function translatePlainSegment(text, s) {
   if (!text.trim()) return text;
-  const leading = (text.match(/^\s*/) || [''])[0];
-  const trailing = (text.match(/\s*$/) || [''])[0];
-  const core = text.slice(leading.length, text.length - trailing.length);
-  const parts = chunk(core, maxChunk(s));
-  const concurrency = s.provider === 'llm' ? Math.max(1, Math.min(6, Number(s.llmConcurrency) || 1)) : 1;
-  const translated = await mapConcurrent(parts, concurrency, part => translate(part, s));
-  return leading + translated.join('\n\n') + trailing;
+  const configuredConcurrency = s.provider === 'deepseek' ? s.deepseekConcurrency : s.llmConcurrency;
+  const concurrency = (s.provider === 'llm' || s.provider === 'deepseek')
+    ? Math.max(1, Math.min(6, Number(configuredConcurrency) || 1)) : 1;
+  const blocks = text.split(/(\n[ \t]*\n+)/);
+  const translated = await mapConcurrent(blocks, concurrency, async block => {
+    if (!block.trim() || !/[\p{L}\p{N}]/u.test(block)) return block;
+    const leading = (block.match(/^\s*/) || [''])[0];
+    const trailing = (block.match(/\s*$/) || [''])[0];
+    const core = block.slice(leading.length, block.length - trailing.length);
+    const parts = chunk(core, maxChunk(s));
+    const output = [];
+    for (const part of parts) output.push(await translate(part, s));
+    return leading + output.join('\n\n') + trailing;
+  });
+  return translated.join('');
 }
 async function translateMarkdownText(text, s) {
+  const paragraphs = text.split(/(\n[ \t]*\n+)/);
+  if (paragraphs.length > 1) {
+    const configuredConcurrency = s.provider === 'deepseek' ? s.deepseekConcurrency : s.llmConcurrency;
+    const concurrency = (s.provider === 'llm' || s.provider === 'deepseek')
+      ? Math.max(1, Math.min(6, Number(configuredConcurrency) || 1)) : 1;
+    const translated = await mapConcurrent(paragraphs, concurrency, paragraph =>
+      paragraph.trim() ? translateMarkdownText(paragraph, s) : paragraph);
+    return translated.join('');
+  }
   // Never send math delimiters or their contents to a translation provider.
   // Prompting an LLM to preserve them is not reliable, and non-LLM providers
   // may alter TeX commands too.
@@ -242,7 +313,7 @@ class QuickZhSettingTab extends PluginSettingTab {
     const save = () => this.plugin.saveSettings();
 
     new Setting(c).setName('翻译引擎').setDesc('Google 免费免配置；DeepL/LLM 质量更好，需要 Key')
-      .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('llm', 'LLM（OpenAI 兼容）')
+      .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('deepseek', 'DeepSeek').addOption('llm', 'LLM（OpenAI 兼容）')
         .setValue(s.provider).onChange(v => { s.provider = v; save(); this.display(); }));
 
     new Setting(c).setName('翻译文件名（= 笔记大标题）').setDesc('开启后生成的中文笔记文件名也用中文标题')
@@ -265,7 +336,16 @@ class QuickZhSettingTab extends PluginSettingTab {
       new Setting(c).setName('并发数').setDesc('同时翻译的分段数，默认 2，范围 1–6')
         .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.llmConcurrency).onChange(v => { s.llmConcurrency = v; save(); }));
     }
+    if (s.provider === 'deepseek') {
+      new Setting(c).setName('DeepSeek API Key').setDesc('使用你自己的 Key，仅保存在 Obsidian 本机 SecretStorage')
+        .addText(t => { t.inputEl.type = 'password'; t.setValue(s.deepseekKey).onChange(v => { s.deepseekKey = v.trim(); save(); }); });
+      new Setting(c).setName('DeepSeek 模型').setDesc('翻译默认使用非思考模式，速度更快')
+        .addDropdown(d => d.addOption('deepseek-flash', 'DeepSeek Flash').addOption('deepseek-v4-pro', 'DeepSeek V4 Pro')
+          .setValue(s.deepseekModel).onChange(v => { s.deepseekModel = v; save(); }));
+      new Setting(c).setName('DeepSeek 并发数').setDesc('同时翻译的分段数，默认 2；遇到限流会自动退避重试')
+        .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.deepseekConcurrency).onChange(v => { s.deepseekConcurrency = v; save(); }));
+    }
   }
 }
 
-module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody };
+module.exports._test = { chunk, splitLongText, mapConcurrent, sanitize, uniquePath, translateMarkdownText, translateBody, withRetry, errorStatus };

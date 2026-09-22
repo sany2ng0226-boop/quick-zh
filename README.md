@@ -11,7 +11,7 @@ It's built for one job: *"I clipped a foreign-language article and I just want a
 - **Frontmatter is preserved** — only the values of `title`/`description` are translated and safely quoted; all other properties (`source`, `date`, `tags`, `category`, …) are kept verbatim, so the YAML never breaks.
 - **Code blocks are kept untouched** — fenced ``` code / prompts are never sent to the translator.
 - **Original is kept** — a new file is created; the source note is never modified. Machine translation is lossy, so the original stays as the source of truth.
-- **Multiple engines** — Google, DeepL, DeepSeek, OpenAI, Claude, or any custom OpenAI-compatible endpoint.
+- **Multiple engines** — Google, DeepL, DeepSeek, OpenAI, and Claude.
 - **Safe repeated runs** — existing translated notes are never overwritten; a numbered copy is created instead.
 - **Faster LLM translation** — choose 1–6 concurrent chunks for long notes (default: 2).
 - **First-class AI providers** — DeepSeek, OpenAI, and Claude each have their own key, model, and concurrency controls; all use automatic backoff for temporary failures.
@@ -63,9 +63,8 @@ Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Goog
   - **DeepSeek**(使用自己的 API Key，内置官方接口与模型预设，限流时自动退避重试)
   - **OpenAI**(使用自己的 API Key，内置官方接口与模型预设)
   - **Claude**(使用自己的 API Key，适配官方 Messages API)
-  - **自定义兼容接口**(任意 OpenAI 兼容服务)
 - 🛡️ **重复翻译不覆盖**:目标文件已存在时自动生成带序号的新副本，不覆盖已有译文。
-- ⚡ **AI 长文并发**:DeepSeek / OpenAI / Claude / 自定义兼容接口均可设置 1–6 个分段并发，默认 2。
+- ⚡ **AI 长文并发**:DeepSeek / OpenAI / Claude 均可设置 1–6 个分段并发，默认 2。
 - 🚀 **DeepSeek 专项适配**:可选 Flash / V4 Pro，默认关闭思考以提高翻译速度；429 或临时服务错误会自动退避重试。
 
 ## 用法
@@ -84,7 +83,7 @@ Switch engine / enter API keys in **Settings → Quick Chinese Translate**. Goog
 
 ## 隐私
 
-- Google / DeepL / DeepSeek / OpenAI / Claude / 自定义接口都会把待翻译文本发到所选服务商。请按需选择，敏感内容建议使用可信的自建接口。
+- Google / DeepL / DeepSeek / OpenAI / Claude 都会把待翻译文本发到所选服务商。请按需选择，避免翻译敏感内容。
 - 在支持 SecretStorage 的新版 Obsidian 中，API Key 会存入安全密钥存储；旧版 Obsidian 会继续使用插件本地配置以保持兼容。
 - 插件不收集任何数据,所有请求由 Obsidian 直接发出。
 

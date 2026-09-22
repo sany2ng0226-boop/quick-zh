@@ -8,7 +8,7 @@
 - Retry rate-limit and temporary server failures with bounded exponential backoff.
 - Add regression tests for retry behavior and DeepSeek secret migration.
 - Add dedicated OpenAI and Claude providers with separate API keys, model presets, concurrency controls, and retry handling.
-- Rename the generic LLM option to Custom OpenAI-compatible endpoint while preserving existing settings.
+- Remove the unverified custom-compatible option from the settings menu while retaining legacy configuration compatibility.
 
 ## 0.5.1
 

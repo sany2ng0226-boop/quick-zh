@@ -3,7 +3,7 @@ const { Plugin, Notice, requestUrl, addIcon, TFile, PluginSettingTab, Setting } 
 addIcon('quick-zh-icon', '<text x="50" y="74" font-size="78" text-anchor="middle" fill="currentColor" font-family="sans-serif">译</text>');
 
 const DEFAULTS = {
-  provider: 'google',      // google | deepl | deepseek | openai | claude | llm
+  provider: 'google',      // google | deepl | deepseek | openai | claude; llm is legacy-only
   targetLang: 'zh-CN',     // google/llm 用；deepl 固定 ZH
   translateFilename: true, // 把文件名也翻成中文（= Obsidian 大标题）
   deeplKey: '',
@@ -348,7 +348,7 @@ class QuickZhSettingTab extends PluginSettingTab {
 
     new Setting(c).setName('翻译引擎').setDesc('各 AI 服务商使用用户自己的 API Key')
       .addDropdown(d => d.addOption('google', 'Google（免费）').addOption('deepl', 'DeepL').addOption('deepseek', 'DeepSeek')
-        .addOption('openai', 'OpenAI').addOption('claude', 'Claude').addOption('llm', '自定义 OpenAI 兼容接口')
+        .addOption('openai', 'OpenAI').addOption('claude', 'Claude')
         .setValue(s.provider).onChange(v => { s.provider = v; save(); this.display(); }));
 
     new Setting(c).setName('翻译文件名（= 笔记大标题）').setDesc('开启后生成的中文笔记文件名也用中文标题')
@@ -362,14 +362,6 @@ class QuickZhSettingTab extends PluginSettingTab {
       new Setting(c).setName('DeepL API Key').addText(t => { t.inputEl.type = 'password'; t.setValue(s.deeplKey).onChange(v => { s.deeplKey = v.trim(); save(); }); });
       new Setting(c).setName('DeepL Pro 账户').setDesc('付费版打开（用 api.deepl.com）')
         .addToggle(t => t.setValue(s.deeplPro).onChange(v => { s.deeplPro = v; save(); }));
-    }
-    if (s.provider === 'llm') {
-      new Setting(c).setName('Endpoint').setDesc('OpenAI 兼容，如 https://api.openai.com/v1')
-        .addText(t => t.setValue(s.llmEndpoint).onChange(v => { s.llmEndpoint = v.trim(); save(); }));
-      new Setting(c).setName('API Key').addText(t => { t.inputEl.type = 'password'; t.setValue(s.llmKey).onChange(v => { s.llmKey = v.trim(); save(); }); });
-      new Setting(c).setName('模型').addText(t => t.setValue(s.llmModel).onChange(v => { s.llmModel = v.trim(); save(); }));
-      new Setting(c).setName('并发数').setDesc('同时翻译的分段数，默认 2，范围 1–6')
-        .addSlider(sl => sl.setLimits(1, 6, 1).setDynamicTooltip().setValue(s.llmConcurrency).onChange(v => { s.llmConcurrency = v; save(); }));
     }
     if (s.provider === 'deepseek') {
       new Setting(c).setName('DeepSeek API Key').setDesc('使用你自己的 Key，仅保存在 Obsidian 本机 SecretStorage')

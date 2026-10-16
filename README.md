@@ -1,8 +1,18 @@
 # Quick Chinese Translate
 
+[English](#quick-chinese-translate) · [中文](#中文说明)
+
 Translate an entire Obsidian note into Simplified Chinese with one click. Quick Chinese Translate creates a new Chinese copy while keeping the original note untouched and protecting the Markdown structures that should not be translated.
 
 Built for clipped articles, research notes, technical writing, and any other foreign-language note you want to keep as a clean, offline-readable Chinese copy.
+
+## Why Quick Chinese Translate?
+
+Reading foreign-language sources should not interrupt your note-taking workflow. Quick Chinese Translate brings full-note translation into Obsidian, so you can turn a clipped article or technical document into a reusable Chinese note without copying text into another app or rebuilding its formatting.
+
+The plugin focuses on a practical distinction: translate the content, preserve the structure. It creates a separate translated copy, keeps the source available for comparison, and protects code, links, formulas, and note metadata. Translation runs through the provider you choose; the plugin does not operate a translation relay server.
+
+Quick Chinese Translate is open source under the MIT license and is available in the official Obsidian Community Plugins directory.
 
 ## What it does
 
@@ -38,6 +48,14 @@ Every API-based provider uses the current user's own key. The plugin does not in
 Choose a provider and enter its key under **Settings → Quick Chinese Translate**. Google is selected by default and requires no configuration.
 
 ## Installation
+
+### Obsidian Community Plugins
+
+1. Open **Settings → Community plugins → Browse** in Obsidian.
+2. Search for **Quick Chinese Translate**.
+3. Select **Install**, then **Enable**.
+
+You can also [open the plugin listing in Obsidian](obsidian://show-plugin?id=quick-zh).
 
 ### Manual installation
 
@@ -97,6 +115,14 @@ DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发�
 在 **设置 → Quick Chinese Translate** 中选择服务商并填写对应 Key。默认使用 Google，无需配置。
 
 ## 安装
+
+### Obsidian 社区插件市场
+
+1. 打开 Obsidian 的 **设置 → 第三方插件 → 浏览**。
+2. 搜索 **Quick Chinese Translate**。
+3. 点击 **安装**，然后 **启用**。
+
+也可以[在 Obsidian 中打开插件页面](obsidian://show-plugin?id=quick-zh)。
 
 ### 手动安装
 

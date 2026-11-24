@@ -148,6 +148,25 @@ test('a progressive run reads checkpoints saved with the previous batch layout',
   assert.equal(previews.join(''), result.body);
 });
 
+test('an interrupted 0.7.2 preview reuses its saved 16-fragment batches after upgrading', async t => {
+  const { paragraphs, root, source } = await fixture(t, 40);
+  const noteId = require('node:crypto').createHash('sha256').update(root + '\0' + source.path).digest('hex');
+  // Fingerprint produced by 0.7.2 for this source, split into groups of 3, 16, 16 and 5.
+  const folder = path.join(root, 'Library/Application Support/obsidian/quick-zh/checkpoints', noteId,
+    '5ab70242f8d0157e5869d473f812f8f1e95d4b6c6488b49b74a9fb8f9077ed6c');
+  await fs.mkdir(folder, { recursive: true });
+  const translated = paragraphs.map(p => '翻译 ' + p);
+  for (const [i,batch] of [translated.slice(0,3), translated.slice(3,19), translated.slice(19,35)].entries()) {
+    await fs.writeFile(path.join(folder, i + '.json'), JSON.stringify(batch));
+  }
+  const requests = mockCodex(t, (_, respond) => respond());
+  const result = await QuickZh._test.translateNote('', paragraphs.join('\n\n'), '', {provider:'subscription'}, {
+    vaultPath:root, filePath:source.path, onPreview() {},
+  });
+  assert.deepEqual(requests, [paragraphs.slice(35)]);
+  assert.equal(result.body, translated.join('\n\n'));
+});
+
 test('after the last batch times out, a new plugin instance sends only the remaining fragment', async t => {
   const { plugin, paragraphs, files } = await fixture(t);
   let failTail = true;

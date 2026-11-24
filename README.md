@@ -32,7 +32,7 @@ Quick Chinese Translate is open source under the MIT license and is available in
 | Google | None | Free default for quick, convenient translation |
 | DeepL | Your DeepL API key | Supports DeepL Free and Pro endpoints |
 | DeepSeek | Your DeepSeek API key | Official endpoint, model presets, non-thinking translation, and retry handling |
-| ChatGPT subscription (macOS) | Codex CLI signed in with ChatGPT | Translates the opening first, runs up to two batches at once, uses Codex plan limits |
+| ChatGPT subscription (macOS) | Codex CLI signed in with ChatGPT | Prioritizes the opening, then groups up to 32 fragments or 12,000 characters per batch. Up to two batches run at once using Codex plan limits. |
 | OpenAI | Your OpenAI API key | Official endpoint and model presets |
 | Claude | Your Anthropic API key | Official Claude Messages API and model presets |
 
@@ -108,7 +108,7 @@ Quick Chinese Translate 是一个面向 Obsidian 的整篇笔记中文翻译插�
 | Google | 无需配置 | 默认免费模式，开箱即用 |
 | DeepL | 用户自己的 DeepL API Key | 支持 Free 和 Pro 接口 |
 | DeepSeek | 用户自己的 DeepSeek API Key | 官方接口、模型预设、非思考翻译和自动重试 |
-| ChatGPT 订阅（macOS） | 本机 Codex CLI 使用 ChatGPT 登录 | 优先翻译开头，最多两批并发，消耗 Codex 订阅额度 |
+| ChatGPT 订阅（macOS） | 本机 Codex CLI 使用 ChatGPT 登录 | 开头用小批次优先翻译，后续每批最多 32 个片段、12,000 个字符。最多两批并发，使用 Codex 订阅额度。 |
 | OpenAI | 用户自己的 OpenAI API Key | 官方接口和模型预设 |
 | Claude | 用户自己的 Anthropic API Key | 官方 Messages API 和模型预设 |
 

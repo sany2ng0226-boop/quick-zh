@@ -292,6 +292,15 @@ test('subscription batches cap item count and aggregate size, retaining order', 
   assert.deepEqual(batches.flat(), texts);
 });
 
+test('progressive translation keeps the opening limits and doubles later batch capacity', () => {
+  const plan = QuickZh._test.subscriptionBatches;
+  const short = Array(80).fill('x');
+  assert.deepEqual(plan(short, 5).map(b => b.length), [5, 32, 32, 11]);
+  assert.deepEqual(plan(short, 18).map(b => b.length), [16, 2, 32, 30]);
+  const long = Array(10).fill('x'.repeat(3000));
+  assert.deepEqual(plan(long, 3).map(b => b.length), [2, 1, 4, 3]);
+});
+
 test('subscription results match source IDs and reject incomplete or ambiguous output', () => {
   const { subscriptionResults } = QuickZh._test;
   const first = { id: 0, text: '甲' }, second = { id: 1, text: '乙' };

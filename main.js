@@ -194,12 +194,13 @@ const SUBSCRIPTION_SCHEMA = {
   } } },
 };
 
-function subscriptionBatches(texts, openingCount = 0) {
+function subscriptionBatches(texts, openingCount = 0, compactBody = false) {
   const batches = [];
-  const maxItems = openingCount ? 16 : 32;
-  const maxLength = openingCount ? 6000 : 12000;
   let batch = [], length = 0;
   for (const [i, text] of texts.entries()) {
+    const compact = i < openingCount || compactBody;
+    const maxItems = compact ? 16 : 32;
+    const maxLength = compact ? 6000 : 12000;
     if (batch.length && (i === openingCount || batch.length >= maxItems || length + text.length > maxLength)) {
       batches.push(batch);
       batch = [];
@@ -314,11 +315,12 @@ async function translateWithSubscription(texts, ctx = {}, preview) {
   let batches = subscriptionBatches(texts, preview?.openingCount);
   const getCache = plan => ctx.filePath && subscriptionCheckpoint(ctx.vaultPath, ctx.filePath, plan);
   let cache = getCache(batches);
-  // Finish partially translated notes from 0.7.1 using their original batch boundaries.
+  // Checkpoints identify batches by index. Resume older jobs with the exact plan that wrote them.
   if (preview && cache && !await cache.exists()) {
-    const legacy = subscriptionBatches(texts);
-    const oldCache = getCache(legacy);
-    if (await oldCache.exists()) { cache = oldCache; batches = legacy; }
+    for (const older of [subscriptionBatches(texts, preview.openingCount, true), subscriptionBatches(texts)]) {
+      const oldCache = getCache(older);
+      if (await oldCache.exists()) { cache = oldCache; batches = older; break; }
+    }
   }
   const results = new Array(batches.length);
   const pending = [];

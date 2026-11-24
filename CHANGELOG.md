@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- Keep the opening subscription batch small and group later text into requests of up to 32 fragments or 12,000 characters. Interrupted translations from earlier versions resume with their original batches.
+
 ## 0.7.2
 
 - Show a live Markdown reading tab during ChatGPT subscription translations. Give the opening paragraphs their own batch and append subsequent paragraphs in source order as they finish.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Add ChatGPT subscription translation on macOS through the signed-in Codex CLI, with structured batches and up to two batches in flight.
+
+- Translate independent body fragments through one bounded queue per note and reuse identical fragments. Google defaults to three workers and retries temporary failures.
+- Support GPT-5 mini’s request parameters and show setup instructions when OpenAI or DeepL credentials are missing.
+
 ## 0.6.0 — 2026-09-22
 
 - Add a dedicated DeepSeek provider using the official API endpoint and user-supplied API key.

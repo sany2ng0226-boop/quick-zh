@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 const capturedRequests = [];
+let onRequest;
 
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -12,6 +13,7 @@ Module._load = function (request, parent, isMain) {
       requestUrl: async request => {
         const { url, body } = request;
         capturedRequests.push(request);
+        if (onRequest) await onRequest(request);
         if (url.endsWith('/v1/messages')) {
           const text = JSON.parse(body).messages[0].content;
           return { status: 200, json: { content: [{ type: 'text', text }] } };
@@ -176,7 +178,7 @@ test('all AI providers use their own bounded concurrency setting', () => {
   assert.equal(providerConcurrency({ provider: 'openai', openaiConcurrency: 4 }), 4);
   assert.equal(providerConcurrency({ provider: 'claude', claudeConcurrency: 5 }), 5);
   assert.equal(providerConcurrency({ provider: 'llm', llmConcurrency: 6 }), 6);
-  assert.equal(providerConcurrency({ provider: 'google' }), 1);
+  assert.equal(providerConcurrency({ provider: 'google' }), 3);
 });
 
 test('loadSecrets migrates plaintext keys out of plugin data', async () => {
@@ -232,4 +234,78 @@ test('withRetry does not retry authentication or balance failures', async () => 
     throw Object.assign(new Error('bad key'), { status: 401 });
   }, { sleep: async () => {} }), /bad key/);
   assert.equal(calls, 1);
+});
+
+test('Google shares one queue across long chunks, links and code boundaries', async t => {
+  const started = [];
+  const finished = [];
+  let active = 0;
+  let peak = 0;
+  onRequest = async ({ url }) => {
+    const part = new URL(url).searchParams.get('q');
+    started.push(part);
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, started.length === 1 ? 20 : 1));
+    finished.push(part);
+    active--;
+  };
+  t.after(() => { onRequest = undefined; });
+  const a = 'a'.repeat(1200);
+  const b = 'b'.repeat(300);
+  const tail = '\n\n[Docs](https://example.org)\n\n```js\ncode\n```\n\nDocs\n\n$$x\n\ny$$';
+  const result = await translateBody(a + b + tail, { provider: 'google', targetLang: 'zh-CN', googleConcurrency: 2 });
+  assert.equal(result, a + '\n\n' + b + tail);
+  assert.deepEqual(started, [a, b, 'Docs']);
+  assert.equal(peak, 2);
+  assert.notEqual(finished[0], a);
+});
+
+test('a failed queue stops dispatch and drains active requests before returning', async () => {
+  const started = [];
+  const finished = [];
+  await assert.rejects(mapConcurrent([0, 1, 2, 3], 2, async index => {
+    started.push(index);
+    if (!index) throw new Error('denied');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    finished.push(index);
+  }), /denied/);
+  assert.deepEqual(started, [0, 1]);
+  assert.deepEqual(finished, [1]);
+});
+
+test('OpenAI sends a compatible GPT-5 mini request and rejects missing keys locally', async () => {
+  capturedRequests.length = 0;
+  const settings = { provider: 'openai', openaiModel: 'gpt-5-mini' };
+  await assert.rejects(translateBody('Hello', settings), /OpenAI API Key/);
+  assert.equal(capturedRequests.length, 0);
+  await translateBody('Hello', { ...settings, openaiKey: 'test' });
+  const request = JSON.parse(capturedRequests[0].body);
+  assert.equal(request.model, 'gpt-5-mini');
+  assert.equal('temperature' in request, false);
+});
+
+test('subscription batches cap item count and aggregate size, retaining order', () => {
+  const texts = [...Array(33).fill('one'), 'a'.repeat(6000), 'b'.repeat(6000)];
+  const batches = QuickZh._test.subscriptionBatches(texts);
+  assert.deepEqual(batches.map(batch => batch.length), [32, 2, 1]);
+  assert.deepEqual(batches.flat(), texts);
+});
+
+test('subscription results match source IDs and reject incomplete or ambiguous output', () => {
+  const { subscriptionResults } = QuickZh._test;
+  const first = { id: 0, text: '甲' }, second = { id: 1, text: '乙' };
+  const format = translations => JSON.stringify({ translations });
+  assert.deepEqual(subscriptionResults(format([second, first]), 2), ['甲', '乙']);
+  for (const rows of [[first], [first, first], [first, { id: 2, text: '乙' }], [first, { id: 1, text: ' ' }]]) {
+    assert.throws(() => subscriptionResults(format(rows), 2), /不完整/);
+  }
+});
+
+test('title and description share the note queue and unrelated metadata stays local', async () => {
+  capturedRequests.length = 0;
+  const fm = '---\ntitle: "Title"\ndescription: "Body"\nsource: private\n---';
+  const out = await QuickZh._test.translateNote(fm, 'Body', 'Original', { provider: 'google', targetLang: 'zh-CN', translateFilename: true });
+  assert.deepEqual(out, { fm, body: 'Body', title: 'Title' });
+  assert.deepEqual(capturedRequests.map(r => new URL(r.url).searchParams.get('q')), ['Title', 'Body']);
 });

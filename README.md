@@ -50,6 +50,10 @@ Every API-based provider uses the current user's own key. The plugin does not in
 
 For subscription translation on macOS, install a recent Codex CLI, run `codex login`, and choose **ChatGPT 订阅（Codex）** in plugin settings. The CLI uses the model supplied by Codex.
 
+The progress notice counts completed fragments. If Codex reports a temporary rate limit, the notice counts down, then the plugin retries the affected batch once and runs the remaining queue one batch at a time. Waiting does not use the three-minute translation timeout. To continue an interrupted translation, open the same source note and translate again. Completed batches survive an Obsidian restart. Changing the translatable input starts a fresh translation.
+
+Completed batches are stored on this Mac under `~/Library/Application Support/obsidian/quick-zh/checkpoints/`. Saving the translated note clears the checkpoints for that translation.
+
 Choose an API provider and enter its key under **Settings → Quick Chinese Translate**. Google is selected by default and requires no configuration.
 
 ## Installation
@@ -121,6 +125,10 @@ DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发�
 3. 插件会自动生成并打开中文副本。
 
 在 Mac 上使用订阅时，安装新版 Codex CLI，运行 `codex login` 并使用 ChatGPT 登录，然后在插件设置里选择 **ChatGPT 订阅（Codex）**。模型由 Codex 选择。
+
+进度提示显示已译片段数。遇到临时限流会显示倒计时，到期后自动重试受影响的批次一次，后续改为一次翻一批。等待时间单独计时，每次翻译仍有三分钟。如果中断，重开同一篇原文，再点「译」即可接着翻。重启 Obsidian 后仍可续翻；修改待译内容会开始一轮新翻译。
+
+已完成批次暂存在本机 `~/Library/Application Support/obsidian/quick-zh/checkpoints/`，译文成功保存后会清理本次翻译的断点。
 
 使用 API 引擎时，在 **设置 → Quick Chinese Translate** 中选择服务商并填写对应 Key。默认使用 Google，无需配置。
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Save completed subscription batches locally. Run the translation command on the same source note to resume after a timeout or restart.
+- Show completed fragments, active batches and a cooldown countdown. On a temporary Codex rate limit, wait outside the translation timeout and retry the affected batch once with reduced concurrency.
+
 ## 0.7.0
 
 - Add ChatGPT subscription translation on macOS through the signed-in Codex CLI, with structured batches and up to two batches in flight.

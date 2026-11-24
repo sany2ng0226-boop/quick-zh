@@ -1,4 +1,4 @@
-const { Plugin, Notice, Platform, requestUrl, addIcon, TFile, PluginSettingTab, Setting } = require('obsidian');
+const { Plugin, Notice, Platform, requestUrl, addIcon, TFile, PluginSettingTab, Setting, ItemView, MarkdownRenderer } = require('obsidian');
 
 addIcon('quick-zh-icon', '<text x="50" y="74" font-size="78" text-anchor="middle" fill="currentColor" font-family="sans-serif">译</text>');
 
@@ -194,11 +194,13 @@ const SUBSCRIPTION_SCHEMA = {
   } } },
 };
 
-function subscriptionBatches(texts) {
+function subscriptionBatches(texts, openingCount = 0) {
   const batches = [];
+  const maxItems = openingCount ? 16 : 32;
+  const maxLength = openingCount ? 6000 : 12000;
   let batch = [], length = 0;
-  for (const text of texts) {
-    if (batch.length && (batch.length >= 32 || length + text.length > 12000)) {
+  for (const [i, text] of texts.entries()) {
+    if (batch.length && (i === openingCount || batch.length >= maxItems || length + text.length > maxLength)) {
       batches.push(batch);
       batch = [];
       length = 0;
@@ -245,6 +247,10 @@ function subscriptionCheckpoint(vaultPath, filePath, batches) {
     'quick-zh', 'checkpoints', hash(vaultPath + '\0' + filePath),
     hash(JSON.stringify([1, SUBSCRIPTION_PROMPT, batches])));
   return {
+    async exists() {
+      try { return (await fs.stat(folder)).isDirectory(); }
+      catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    },
     async read(name) {
       try { return JSON.parse(await fs.readFile(path.join(folder, name), 'utf8')); }
       catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
@@ -301,16 +307,26 @@ function codexCommand(args, input, options, signal, onBackoff) {
   });
 }
 
-async function translateWithSubscription(texts, ctx = {}) {
+async function translateWithSubscription(texts, ctx = {}, preview) {
   if (!Platform?.isDesktopApp || !Platform.isMacOS) throw new Error('ChatGPT 订阅翻译需要 macOS 桌面版 Obsidian');
   if (!texts.length) return [];
   const fs = require('fs').promises, os = require('os'), path = require('path');
-  const batches = subscriptionBatches(texts);
-  const cache = ctx.filePath && subscriptionCheckpoint(ctx.vaultPath, ctx.filePath, batches);
+  let batches = subscriptionBatches(texts, preview?.openingCount);
+  const getCache = plan => ctx.filePath && subscriptionCheckpoint(ctx.vaultPath, ctx.filePath, plan);
+  let cache = getCache(batches);
+  // Finish partially translated notes from 0.7.1 using their original batch boundaries.
+  if (preview && cache && !await cache.exists()) {
+    const legacy = subscriptionBatches(texts);
+    const oldCache = getCache(legacy);
+    if (await oldCache.exists()) { cache = oldCache; batches = legacy; }
+  }
   const results = new Array(batches.length);
   const pending = [];
-  let completed = 0;
+  const offsets = [];
+  let completed = 0, offset = 0;
   for (const [i, batch] of batches.entries()) {
+    offsets.push(offset);
+    offset += batch.length;
     const saved = cache && await cache.read(i + '.json');
     if (Array.isArray(saved) && saved.length === batch.length && saved.every(t => typeof t === 'string' && t.trim())) {
       results[i] = saved;
@@ -318,6 +334,11 @@ async function translateWithSubscription(texts, ctx = {}) {
     } else pending.push(i);
   }
   ctx.checkpoint = cache;
+  if (preview) {
+    for (const [i, saved] of results.entries()) {
+      if (saved) await preview.receive(offsets[i], saved);
+    }
+  }
   let retryAt = Number(cache && await cache.read('retry-at.json')) || 0;
   let serial = retryAt > Date.now();
   const active = new Set(), retried = new Set();
@@ -362,6 +383,7 @@ async function translateWithSubscription(texts, ctx = {}) {
       results[i] = rows;
       completed += rows.length;
       progress();
+      if (preview) await preview.receive(offsets[i], rows);
     } catch (error) {
       if (error.retryAt === undefined) throw error;
       const until = retryAt;
@@ -406,6 +428,16 @@ function sanitize(name) {
 async function translateNote(fm, body, basename, s, ctx) {
   const pieces = [];
   const jobs = new Map();
+  const progressive = s.provider === 'subscription' && typeof ctx?.onPreview === 'function';
+  const paragraphs = [];
+  let paragraphStart = 0;
+  function finishParagraph() {
+    if (!progressive) return;
+    if (pieces.slice(paragraphStart).some(piece => typeof piece !== 'string' || piece.trim())) {
+      paragraphs.push({ end: pieces.length, jobCount: jobs.size });
+    }
+    paragraphStart = pieces.length;
+  }
   function job(text) {
     if (!jobs.has(text)) jobs.set(text, { translated: '' });
     return jobs.get(text);
@@ -424,10 +456,11 @@ async function translateNote(fm, body, basename, s, ctx) {
   }
   if (!title && s.translateFilename && basename) title = job(basename);
 
-  function addPlainText(text) {
-    for (const block of text.split(/(\n[ \t]*\n+)/)) {
+  function addPlainText(text, insideLink) {
+    for (const [index, block] of text.split(/(\n[ \t]*\n+)/).entries()) {
       if (!/[\p{L}\p{N}]/u.test(block)) {
         pieces.push(block);
+        if (index % 2 && !insideLink) finishParagraph();
         continue;
       }
       pieces.push(block.match(/^\s*/)[0]);
@@ -440,35 +473,58 @@ async function translateNote(fm, body, basename, s, ctx) {
     }
   }
 
-  function addMarkdown(text) {
+  function addMarkdown(text, insideLink = false) {
     const pattern = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|(?<!\\)\$(?!\$|\s)(?:\\.|[^\\$\n])*(?<![\\\s])\$(?!\$))|(!?)\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"')\],;!?]+)/g;
     let cursor = 0;
     for (const match of text.matchAll(pattern)) {
-      addPlainText(text.slice(cursor, match.index));
+      addPlainText(text.slice(cursor, match.index), insideLink);
       if (match[1] || match[5]) pieces.push(match[0]);
       else {
         pieces.push(match[2] + '[');
-        addMarkdown(match[3]);
+        addMarkdown(match[3], true);
         pieces.push('](' + match[4] + ')');
       }
       cursor = match.index + match[0].length;
     }
-    addPlainText(text.slice(cursor));
+    addPlainText(text.slice(cursor), insideLink);
   }
 
   for (const segment of body.split(/(```[\s\S]*?```)/g)) {
     if (segment.startsWith('```')) pieces.push(segment);
     else addMarkdown(segment);
   }
+  finishParagraph();
   const texts = [...jobs.keys()];
+  const values = [...jobs.values()];
+  const asMarkdown = piece => typeof piece === 'string' ? piece : piece.translated;
+  let ready = 0, emitted = 0, paragraph = 0;
+  let rendering = Promise.resolve();
+  function receive(start, rows) {
+    rows.forEach((text, i) => { values[start + i].translated = text; });
+    // A later concurrent batch can finish first. Only emit complete paragraphs before the first gap.
+    while (ready < pieces.length && (typeof pieces[ready] === 'string' || pieces[ready].translated)) ready++;
+    const from = emitted;
+    while (paragraph < paragraphs.length && paragraphs[paragraph].end <= ready) {
+      emitted = paragraphs[paragraph++].end;
+    }
+    if (emitted > from) {
+      const delta = pieces.slice(from, emitted).map(asMarkdown).join('');
+      rendering = rendering.then(() => ctx.onPreview(delta, title?.translated || basename));
+    }
+    return rendering;
+  }
+  const preview = progressive && paragraphs.length ? {
+    openingCount: Math.max(1, paragraphs[Math.min(2, paragraphs.length - 1)].jobCount),
+    receive,
+  } : null;
   const translated = s.provider === 'subscription'
-    ? await translateWithSubscription(texts, ctx)
+    ? await translateWithSubscription(texts, ctx, preview)
     : await mapConcurrent(texts, providerConcurrency(s), part => translate(part, s));
   texts.forEach((text, index) => { jobs.get(text).translated = translated[index]; });
   for (const { index, name, value } of fields) lines[index] = name + ': ' + JSON.stringify(value.translated);
   return {
     fm: lines.join('\n'),
-    body: pieces.map(piece => typeof piece === 'string' ? piece : piece.translated).join(''),
+    body: pieces.map(asMarkdown).join(''),
     title: title?.translated || '',
   };
 }
@@ -512,12 +568,79 @@ function uniquePath(vault, dir, base) {
   return path;
 }
 
+const PREVIEW_TYPE = 'quick-zh-preview';
+
+function registerPreview(plugin) {
+  class TranslationPreview extends ItemView {
+    getViewType() { return PREVIEW_TYPE; }
+    getDisplayText() { return '译文预览'; }
+    getIcon() { return 'quick-zh-icon'; }
+
+    async onOpen() {
+      this.closed = false;
+      this.contentEl.addClass('markdown-preview-view');
+      this.contentEl.style.overflowY = 'auto';
+      const reader = this.contentEl.createDiv({ cls: 'markdown-rendered' });
+      reader.style.maxWidth = 'var(--file-line-width, 700px)';
+      reader.style.margin = '0 auto';
+      this.heading = reader.createEl('h1');
+      this.body = reader.createDiv({ cls: 'quick-zh-preview-body' });
+      this.footer = reader.createDiv();
+      this.footer.style.overflowAnchor = 'none';
+    }
+    async onClose() { this.closed = true; }
+    getState() { return { sourcePath: this.sourcePath, outputPath: this.outputPath }; }
+    async setState(state, result) {
+      await super.setState(state, result);
+      this.sourcePath = state.sourcePath;
+      this.outputPath = state.outputPath;
+      if (!this.heading || this.body.childElementCount) return;
+      this.heading.setText(this.app.vault.getAbstractFileByPath(this.sourcePath)?.basename || '译文预览');
+      if (this.outputPath) this.showResult(this.outputPath);
+      else this.showResume();
+    }
+    async append(markdown, title) {
+      if (this.closed) return;
+      if (!this.body.childElementCount) this.footer.setText('正在翻译后续段落…');
+      if (title && this.heading.textContent !== title) this.heading.setText(title);
+      const section = this.body.createDiv();
+      try {
+        if (MarkdownRenderer.render) await MarkdownRenderer.render(this.app, markdown, section, this.sourcePath, this);
+        else await MarkdownRenderer.renderMarkdown(markdown, section, this.sourcePath, this);
+      } catch (error) {
+        section.setText(markdown);
+        section.style.whiteSpace = 'pre-wrap';
+        console.warn('[quick-zh] 无法渲染预览段落', error);
+      }
+    }
+    showFileAction(message, label, path) {
+      if (this.closed) return;
+      this.footer.empty();
+      this.footer.createEl('p', { text: message });
+      this.footer.createEl('button', { text: label }).onclick = async () => {
+        const target = this.app.vault.getAbstractFileByPath(path);
+        if (target instanceof TFile) await this.leaf.openFile(target);
+        else new Notice('找不到笔记：' + path);
+      };
+    }
+    showResult(path) {
+      this.outputPath = path;
+      this.showFileAction('翻译完成', '打开正式译文', path);
+    }
+    showResume() {
+      this.showFileAction('回到原文后，再点「译」可继续。', '打开原文', this.sourcePath);
+    }
+  }
+  plugin.registerView(PREVIEW_TYPE, leaf => new TranslationPreview(leaf));
+}
+
 module.exports = class QuickZh extends Plugin {
   async onload() {
     this.activeNotes = new Map();
     const saved = await this.loadData() || {};
     this.settings = Object.assign({}, DEFAULTS, saved);
     await this.loadSecrets(saved);
+    if (ItemView && this.registerView) registerPreview(this);
     this.addRibbonIcon('quick-zh-icon', '翻译当前笔记 → 中文', () => this.run());
     this.addCommand({ id: 'translate-zh', name: '翻译当前笔记 → 中文', callback: () => this.run() });
     this.addSettingTab(new QuickZhSettingTab(this.app, this));
@@ -551,6 +674,39 @@ module.exports = class QuickZh extends Plugin {
     }
     await this.saveData(data);
   }
+  previewSession(file, signal) {
+    const workspace = this.app.workspace;
+    const sourceLeaf = workspace.activeLeaf;
+    const sourceIsActive = () => workspace.activeLeaf === sourceLeaf && sourceLeaf?.view?.file?.path === file.path;
+    let attempted = false;
+    let view;
+    return {
+      async append(markdown, title) {
+        if (!markdown.trim() || signal.aborted) return;
+        if (!attempted) {
+          attempted = true;
+          if (!sourceIsActive()) return;
+          try {
+            const leaf = workspace.getLeaf(true);
+            await leaf.setViewState({ type: PREVIEW_TYPE, active: false, state: { sourcePath: file.path } });
+            await leaf.loadIfDeferred?.();
+            if (signal.aborted || leaf.view.getViewType() !== PREVIEW_TYPE) return;
+            view = leaf.view;
+            if (sourceIsActive()) workspace.setActiveLeaf(leaf, { focus: true });
+          } catch (error) {
+            console.warn('[quick-zh] 无法打开译文预览', error);
+            return;
+          }
+        }
+        if (view && !view.closed) await view.append(markdown, title);
+      },
+      complete(translated) {
+        if (view && !view.closed) view.showResult(translated.path);
+        return attempted || !sourceIsActive();
+      },
+      pause() { if (view && !view.closed) view.showResume(); },
+    };
+  }
   async run() {
     const s = { ...this.settings };
     const file = this.app.workspace.getActiveFile();
@@ -562,6 +718,9 @@ module.exports = class QuickZh extends Plugin {
     this.activeNotes.set(sourcePath, controller);
     const n = new Notice('翻译中…', 0);
     const ctx = { signal: controller.signal, onProgress: message => n.setMessage(message) };
+    const preview = s.provider === 'subscription' && ItemView && this.registerView
+      ? this.previewSession(file, controller.signal) : null;
+    if (preview) ctx.onPreview = preview.append;
     try {
       if (s.provider === 'subscription') {
         ctx.vaultPath = this.app.vault.adapter.getBasePath?.();
@@ -586,10 +745,11 @@ module.exports = class QuickZh extends Plugin {
       }
       n.hide(); new Notice('已生成: ' + newPath.split('/').pop());
       const tf = this.app.vault.getAbstractFileByPath(newPath);
-      if (tf instanceof TFile) await this.app.workspace.getLeaf(true).openFile(tf);
+      if (tf instanceof TFile && !preview?.complete(tf)) await this.app.workspace.getLeaf(true).openFile(tf);
     } catch (e) {
       n.hide();
       if (!controller.signal.aborted) {
+        preview?.pause();
         const resume = ctx.progress ? '。' + ctx.progress + '，再点「译」可继续' : '';
         new Notice('翻译失败 (' + s.provider + '): ' + e.message + resume, 10000);
         console.error('[quick-zh]', e);
@@ -626,7 +786,7 @@ class QuickZhSettingTab extends PluginSettingTab {
         .addText(t => t.setValue(s.targetLang).onChange(v => { s.targetLang = v.trim() || 'zh-CN'; save(); }));
     }
     if (s.provider === 'subscription') {
-      new Setting(c).setName('ChatGPT 订阅（Codex）').setDesc('使用 macOS 本机 Codex CLI 的 ChatGPT 登录和额度。每批最多 32 个片段，最多同时翻译 2 批。');
+      new Setting(c).setName('ChatGPT 订阅（Codex）').setDesc('使用本机 Codex 的 ChatGPT 登录和额度。先显示开头，后续段落按顺序追加，最多同时翻译两批。');
     }
     if (s.provider === 'deepl') {
       new Setting(c).setName('DeepL API Key').addText(t => { t.inputEl.type = 'password'; t.setValue(s.deeplKey).onChange(v => { s.deeplKey = v.trim(); save(); }); });

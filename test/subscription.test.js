@@ -107,6 +107,47 @@ function mockCodex(t, complete) {
 
 const timeout = () => Object.assign(new Error('Timed out'), { killed: true, signal: 'SIGTERM' });
 
+test('opening paragraphs arrive early and later batches append in order across a gap', async t => {
+  const { paragraphs, root } = await fixture(t, 54);
+  const deltas = [];
+  const body = ['A [site](https://example.org).', 'Date', ...paragraphs].join('\n\n');
+  let waiting;
+  const requests = mockCodex(t, (texts, respond) => {
+    if (texts[0] === paragraphs[1]) { waiting = respond; return; }
+    respond();
+    if (waiting && texts.includes(paragraphs.at(-1))) {
+      assert.equal(deltas.length, 1, 'later results are held until all earlier paragraphs are ready');
+      waiting();
+    }
+  });
+  const value = await QuickZh._test.translateNote('---\ntitle: Title\n---', body, '', {provider:'subscription'}, {
+    vaultPath: root, filePath: 'source.md',
+    onPreview(delta, title) { assert.equal(title, '翻译 Title'); deltas.push(delta); },
+  });
+  assert.deepEqual(requests[0], ['Title','A','site','Date',paragraphs[0]]);
+  assert.match(deltas[0], /\[翻译 site\]\(https:\/\/example.org\)/);
+  assert.ok(deltas[0].trimEnd().endsWith('翻译 Paragraph 0'));
+  assert.ok(deltas.length >= 2);
+  assert.equal(deltas.join(''), value.body);
+});
+
+test('a progressive run reads checkpoints saved with the previous batch layout', async t => {
+  const { paragraphs, root } = await fixture(t);
+  const body = paragraphs.join('\n\n'), settings = {provider:'subscription'};
+  const ctx = {filePath:'source.md', vaultPath:root};
+  let fail = true;
+  const requests = mockCodex(t, (texts, respond) => respond(fail && texts.length === 1 ? timeout() : null));
+  await assert.rejects(QuickZh._test.translateNote('', body, '', settings, ctx), /超时/);
+  requests.length = 0;
+  fail = false;
+  const previews = [];
+  const result = await QuickZh._test.translateNote('', body, '', settings, {
+    ...ctx, onPreview(delta) { previews.push(delta); },
+  });
+  assert.deepEqual(requests, [[paragraphs.at(-1)]]);
+  assert.equal(previews.join(''), result.body);
+});
+
 test('after the last batch times out, a new plugin instance sends only the remaining fragment', async t => {
   const { plugin, paragraphs, files } = await fixture(t);
   let failTail = true;

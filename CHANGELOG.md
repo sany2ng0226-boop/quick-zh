@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+
+- Show a live Markdown reading tab during ChatGPT subscription translations. Give the opening paragraphs their own batch and append subsequent paragraphs in source order as they finish.
+- Keep the reader’s place when saving the complete note. Existing interrupted translations can continue from checkpoints written by 0.7.1.
+
 ## 0.7.1
 
 - Save completed subscription batches locally. Run the translation command on the same source note to resume after a timeout or restart.

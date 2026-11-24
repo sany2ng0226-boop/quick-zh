@@ -32,7 +32,7 @@ Quick Chinese Translate is open source under the MIT license and is available in
 | Google | None | Free default for quick, convenient translation |
 | DeepL | Your DeepL API key | Supports DeepL Free and Pro endpoints |
 | DeepSeek | Your DeepSeek API key | Official endpoint, model presets, non-thinking translation, and retry handling |
-| ChatGPT subscription (macOS) | Codex CLI signed in with ChatGPT | Up to 32 fragments per batch, two batches at a time, uses Codex plan limits |
+| ChatGPT subscription (macOS) | Codex CLI signed in with ChatGPT | Translates the opening first, runs up to two batches at once, uses Codex plan limits |
 | OpenAI | Your OpenAI API key | Official endpoint and model presets |
 | Claude | Your Anthropic API key | Official Claude Messages API and model presets |
 
@@ -46,7 +46,7 @@ Every API-based provider uses the current user's own key. The plugin does not in
 
 1. Open the note you want to translate.
 2. Click the **译** ribbon icon, or run **翻译当前笔记 → 中文** from the command palette.
-3. The translated copy is created and opened automatically.
+3. With a ChatGPT subscription, start reading in the preview as soon as the opening is translated. More paragraphs appear below in source order. When the full copy is saved, choose **打开正式译文** in the preview. Other engines open the finished copy automatically.
 
 For subscription translation on macOS, install a recent Codex CLI, run `codex login`, and choose **ChatGPT 订阅（Codex）** in plugin settings. The CLI uses the model supplied by Codex.
 
@@ -108,7 +108,7 @@ Quick Chinese Translate 是一个面向 Obsidian 的整篇笔记中文翻译插�
 | Google | 无需配置 | 默认免费模式，开箱即用 |
 | DeepL | 用户自己的 DeepL API Key | 支持 Free 和 Pro 接口 |
 | DeepSeek | 用户自己的 DeepSeek API Key | 官方接口、模型预设、非思考翻译和自动重试 |
-| ChatGPT 订阅（macOS） | 本机 Codex CLI 使用 ChatGPT 登录 | 每批最多 32 个片段，同时最多 2 批，消耗 Codex 订阅额度 |
+| ChatGPT 订阅（macOS） | 本机 Codex CLI 使用 ChatGPT 登录 | 优先翻译开头，最多两批并发，消耗 Codex 订阅额度 |
 | OpenAI | 用户自己的 OpenAI API Key | 官方接口和模型预设 |
 | Claude | 用户自己的 Anthropic API Key | 官方 Messages API 和模型预设 |
 
@@ -122,7 +122,7 @@ DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发�
 
 1. 打开需要翻译的笔记。
 2. 点击左侧栏的 **译** 图标，或在命令面板运行 **翻译当前笔记 → 中文**。
-3. 插件会自动生成并打开中文副本。
+3. 使用 ChatGPT 订阅时，开头译好就会出现阅读预览，后续段落按原文顺序追加。读到一半可以切换标签页。全文保存后可在预览里点 **打开正式译文**。其他引擎会在完成后打开中文副本。
 
 在 Mac 上使用订阅时，安装新版 Codex CLI，运行 `codex login` 并使用 ChatGPT 登录，然后在插件设置里选择 **ChatGPT 订阅（Codex）**。模型由 Codex 选择。
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.3
+
+- Keep the opening subscription batch small and group later text into requests of up to 32 fragments or 12,000 characters. Interrupted translations from earlier versions resume with their original batches.
+
+## 0.7.2
+
+- Show a live Markdown reading tab during ChatGPT subscription translations. Give the opening paragraphs their own batch and append subsequent paragraphs in source order as they finish.
+- Keep the reader’s place when saving the complete note. Existing interrupted translations can continue from checkpoints written by 0.7.1.
+
+## 0.7.1
+
+- Save completed subscription batches locally. Run the translation command on the same source note to resume after a timeout or restart.
+- Show completed fragments, active batches and a cooldown countdown. On a temporary Codex rate limit, wait outside the translation timeout and retry the affected batch once with reduced concurrency.
+
+## 0.7.0
+
+- Add ChatGPT subscription translation on macOS through the signed-in Codex CLI, with structured batches and up to two batches in flight.
+
+- Translate independent body fragments through one bounded queue per note and reuse identical fragments. Google defaults to three workers and retries temporary failures.
+- Support GPT-5 mini’s request parameters and show setup instructions when OpenAI or DeepL credentials are missing.
+
 ## 0.6.0 — 2026-09-22
 
 - Add a dedicated DeepSeek provider using the official API endpoint and user-supplied API key.

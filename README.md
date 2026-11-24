@@ -32,8 +32,11 @@ Quick Chinese Translate is open source under the MIT license and is available in
 | Google | None | Free default for quick, convenient translation |
 | DeepL | Your DeepL API key | Supports DeepL Free and Pro endpoints |
 | DeepSeek | Your DeepSeek API key | Official endpoint, model presets, non-thinking translation, and retry handling |
+| ChatGPT subscription (macOS) | Codex CLI signed in with ChatGPT | Prioritizes the opening, then groups up to 32 fragments or 12,000 characters per batch. Up to two batches run at once using Codex plan limits. |
 | OpenAI | Your OpenAI API key | Official endpoint and model presets |
 | Claude | Your Anthropic API key | Official Claude Messages API and model presets |
+
+Google translates up to 3 chunks per note concurrently by default (adjustable from 1 to 4). Identical body fragments share one request within a note.
 
 DeepSeek, OpenAI, and Claude support 1–6 concurrent translation chunks for long notes. The default is 2. Temporary rate-limit and server failures use bounded exponential backoff, while authentication errors fail immediately.
 
@@ -43,9 +46,15 @@ Every API-based provider uses the current user's own key. The plugin does not in
 
 1. Open the note you want to translate.
 2. Click the **译** ribbon icon, or run **翻译当前笔记 → 中文** from the command palette.
-3. The translated copy is created and opened automatically.
+3. With a ChatGPT subscription, start reading in the preview as soon as the opening is translated. More paragraphs appear below in source order. When the full copy is saved, choose **打开正式译文** in the preview. Other engines open the finished copy automatically.
 
-Choose a provider and enter its key under **Settings → Quick Chinese Translate**. Google is selected by default and requires no configuration.
+For subscription translation on macOS, install a recent Codex CLI, run `codex login`, and choose **ChatGPT 订阅（Codex）** in plugin settings. The CLI uses the model supplied by Codex.
+
+The progress notice counts completed fragments. If Codex reports a temporary rate limit, the notice counts down, then the plugin retries the affected batch once and runs the remaining queue one batch at a time. Waiting does not use the three-minute translation timeout. To continue an interrupted translation, open the same source note and translate again. Completed batches survive an Obsidian restart. Changing the translatable input starts a fresh translation.
+
+Completed batches are stored on this Mac under `~/Library/Application Support/obsidian/quick-zh/checkpoints/`. Saving the translated note clears the checkpoints for that translation.
+
+Choose an API provider and enter its key under **Settings → Quick Chinese Translate**. Google is selected by default and requires no configuration.
 
 ## Installation
 
@@ -67,7 +76,7 @@ Add `sany2ng0226-boop/quick-zh` to [BRAT](https://github.com/TfTHacker/obsidian4
 
 ## Privacy and API keys
 
-- Translation text is sent directly from Obsidian to the provider selected by the user.
+- Translation text goes to the selected provider. Subscription mode passes the selected note’s translatable fragments to the local Codex CLI over stdin for processing by OpenAI.
 - API keys belong to each user and are never bundled with the plugin or published in the repository.
 - On supported Obsidian versions, keys are stored in local SecretStorage and shown as masked fields in settings.
 - The plugin does not collect analytics or relay translation content through its own server.
@@ -99,8 +108,11 @@ Quick Chinese Translate 是一个面向 Obsidian 的整篇笔记中文翻译插�
 | Google | 无需配置 | 默认免费模式，开箱即用 |
 | DeepL | 用户自己的 DeepL API Key | 支持 Free 和 Pro 接口 |
 | DeepSeek | 用户自己的 DeepSeek API Key | 官方接口、模型预设、非思考翻译和自动重试 |
+| ChatGPT 订阅（macOS） | 本机 Codex CLI 使用 ChatGPT 登录 | 开头用小批次优先翻译，后续每批最多 32 个片段、12,000 个字符。最多两批并发，使用 Codex 订阅额度。 |
 | OpenAI | 用户自己的 OpenAI API Key | 官方接口和模型预设 |
 | Claude | 用户自己的 Anthropic API Key | 官方 Messages API 和模型预设 |
+
+Google 默认每篇笔记并发翻译 3 个分段，可调为 1–4。同一篇正文里完全相同的片段只请求一次。
 
 DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发数为 2。遇到限流或临时服务器错误时会进行有限次数的指数退避重试；Key 错误等认证问题不会反复请求。
 
@@ -110,9 +122,15 @@ DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发�
 
 1. 打开需要翻译的笔记。
 2. 点击左侧栏的 **译** 图标，或在命令面板运行 **翻译当前笔记 → 中文**。
-3. 插件会自动生成并打开中文副本。
+3. 使用 ChatGPT 订阅时，开头译好就会出现阅读预览，后续段落按原文顺序追加。读到一半可以切换标签页。全文保存后可在预览里点 **打开正式译文**。其他引擎会在完成后打开中文副本。
 
-在 **设置 → Quick Chinese Translate** 中选择服务商并填写对应 Key。默认使用 Google，无需配置。
+在 Mac 上使用订阅时，安装新版 Codex CLI，运行 `codex login` 并使用 ChatGPT 登录，然后在插件设置里选择 **ChatGPT 订阅（Codex）**。模型由 Codex 选择。
+
+进度提示显示已译片段数。遇到临时限流会显示倒计时，到期后自动重试受影响的批次一次，后续改为一次翻一批。等待时间单独计时，每次翻译仍有三分钟。如果中断，重开同一篇原文，再点「译」即可接着翻。重启 Obsidian 后仍可续翻；修改待译内容会开始一轮新翻译。
+
+已完成批次暂存在本机 `~/Library/Application Support/obsidian/quick-zh/checkpoints/`，译文成功保存后会清理本次翻译的断点。
+
+使用 API 引擎时，在 **设置 → Quick Chinese Translate** 中选择服务商并填写对应 Key。默认使用 Google，无需配置。
 
 ## 安装
 
@@ -134,7 +152,7 @@ DeepSeek、OpenAI 和 Claude 支持 1–6 个长文分段并发，默认并发�
 
 ## 隐私与 API Key
 
-- 待翻译文本由 Obsidian 直接发送给用户选择的服务商。
+- 待翻译文本发送给所选服务商。订阅模式通过标准输入把当前笔记需要翻译的片段交给本机 Codex CLI，由 OpenAI 处理。
 - API Key 属于各个用户，不会内置在插件中，也不会上传到公开仓库。
 - 在支持的 Obsidian 版本中，Key 保存在本机 SecretStorage，并在设置页中以密码形式遮挡。
 - 插件不收集分析数据，也不会通过自己的服务器中转翻译内容。
